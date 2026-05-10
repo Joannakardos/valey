@@ -710,11 +710,7 @@ function setupControls() {
   if (!isMobile) {
     renderer.domElement.addEventListener("click", () => {
       if (state.overview) {
-        state.overview = false;
-        camera.position.set(0, WORLD.eyeHeight, 6);
-        state.yaw = 0;
-        state.pitch = 0.08;
-        updateCameraRotation();
+        enterFirstPerson();
         setStatus("First-person mode. WASD/ZQSD to move. Aim at lanterns and click.");
       }
       if (!document.pointerLockElement) {
@@ -753,11 +749,8 @@ function setupMobileControls() {
   let lookY = 0;
   renderer.domElement.addEventListener("touchstart", (event) => {
     if (state.overview) {
-      state.overview = false;
-      camera.position.set(0, WORLD.eyeHeight, 6);
-      state.yaw = 0;
-      state.pitch = 0.08;
-      updateCameraRotation();
+      enterFirstPerson();
+      requestLandscapeMode();
       setStatus("Mobile first-person mode. Left side moves, right side looks.");
     }
     for (const touch of event.changedTouches) {
@@ -827,14 +820,35 @@ function setupMessageUi() {
 
 function updateCameraRotation() {
   camera.rotation.order = "YXZ";
-  camera.rotation.y = state.yaw;
   camera.rotation.x = state.pitch;
+  camera.rotation.y = state.yaw;
+  camera.rotation.z = 0;
 }
 
 function setOverviewCamera() {
   state.overview = true;
   camera.position.set(0, 18, 27);
   camera.lookAt(0, 1.5, 0);
+}
+
+function enterFirstPerson() {
+  state.overview = false;
+  camera.position.set(0, WORLD.eyeHeight, 6);
+  state.yaw = 0;
+  state.pitch = 0;
+  camera.rotation.set(0, 0, 0, "YXZ");
+  updateCameraRotation();
+}
+
+function requestLandscapeMode() {
+  if (!isMobile) return;
+  const doc = document.documentElement;
+  if (doc.requestFullscreen && !document.fullscreenElement) {
+    doc.requestFullscreen().catch(() => {});
+  }
+  if (screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock("landscape").catch(() => {});
+  }
 }
 
 function animate() {

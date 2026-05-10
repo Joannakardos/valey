@@ -204,6 +204,26 @@
       text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
     }
 
+    #rotatePrompt {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 28px;
+      background: rgba(5, 7, 15, 0.92);
+      color: #fff4cc;
+      text-align: center;
+      font: 16px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      z-index: 60;
+    }
+
+    #rotatePrompt strong {
+      display: block;
+      margin-bottom: 10px;
+      color: #ffffff;
+      font-size: 20px;
+    }
+
     .panel {
       max-width: min(360px, calc(100vw - 36px));
       padding: 12px 14px;
@@ -241,6 +261,12 @@
         display: block;
       }
     }
+
+    @media (max-width: 900px) and (orientation: portrait) {
+      #rotatePrompt {
+        display: grid;
+      }
+    }
   </style>
 </head>
 
@@ -257,6 +283,12 @@
       <div id="joystickKnob"></div>
     </div>
     <div id="mobileHint">Left side moves<br>Right side looks<br>Tap lanterns</div>
+  </div>
+  <div id="rotatePrompt">
+    <div>
+      <strong>Turn your phone sideways</strong>
+      Landscape mode is better for moving, looking, and touching the lanterns.
+    </div>
   </div>
   <div id="debugStatus">Page loaded. Waiting for Three.js...</div>
   <div id="messageOverlay" aria-hidden="true">
@@ -281,7 +313,7 @@
     });
   </script>
   <script src="./three.min.js?v=base44-valley"></script>
-  <script src="./main.js?v=base44-valley-5"></script>
+  <script src="./main.js?v=base44-valley-6"></script>
 </body>
 
 </html>
