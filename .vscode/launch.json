@@ -1,0 +1,27 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node-terminal",
+            "request": "launch",
+            "name": "Open game without debugger",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Start-Process -FilePath msedge -ArgumentList '${workspaceFolder}\\index.html'\""
+        },
+        {
+            "type": "msedge",
+            "request": "launch",
+            "name": "Open game directly",
+            "file": "${workspaceFolder}/index.html",
+            "webRoot": "${workspaceFolder}",
+            "userDataDir": "${workspaceFolder}/.vscode/edge-profile"
+        },
+        {
+            "type": "msedge",
+            "request": "launch",
+            "name": "Open local server",
+            "url": "http://127.0.0.1:5173/",
+            "webRoot": "${workspaceFolder}",
+            "userDataDir": "${workspaceFolder}/.vscode/edge-profile"
+        }
+    ]
+}

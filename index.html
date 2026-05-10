@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flower Lantern Valley</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ui-bg: rgba(6, 10, 22, 0.72);
+      --ui-border: rgba(255, 255, 255, 0.15);
+      --ui-text: #f5f1dd;
+      --ui-accent: #ffbe6a;
+      --ui-muted: rgba(245, 241, 221, 0.7);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background:
+        radial-gradient(circle at center, rgba(255, 190, 106, 0.12), transparent 42%),
+        linear-gradient(180deg, #071024 0%, #05070f 100%);
+      color: var(--ui-text);
+    }
+
+    canvas {
+      display: block;
+      touch-action: none;
+    }
+
+    #hud {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      right: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #debugStatus {
+      position: fixed;
+      left: 18px;
+      bottom: 18px;
+      max-width: min(520px, calc(100vw - 36px));
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 190, 106, 0.35);
+      border-radius: 8px;
+      background: rgba(6, 10, 22, 0.78);
+      color: rgba(255, 244, 204, 0.82);
+      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      pointer-events: none;
+      z-index: 30;
+    }
+
+    #crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 24px;
+      height: 24px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 12;
+      opacity: 0.7;
+      transition: transform 160ms ease, opacity 160ms ease;
+    }
+
+    #crosshair::before,
+    #crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+      transition: background 160ms ease, box-shadow 160ms ease;
+    }
+
+    #crosshair::before {
+      left: 0;
+      top: 50%;
+      width: 100%;
+      height: 1px;
+    }
+
+    #crosshair::after {
+      left: 50%;
+      top: 0;
+      width: 1px;
+      height: 100%;
+    }
+
+    #crosshair.active {
+      transform: translate(-50%, -50%) scale(1.25);
+      opacity: 1;
+    }
+
+    #crosshair.active::before,
+    #crosshair.active::after {
+      background: #ffca73;
+      box-shadow: 0 0 18px rgba(255, 190, 106, 0.9);
+    }
+
+    #messageOverlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: radial-gradient(circle, rgba(9, 7, 3, 0.28), rgba(2, 3, 8, 0.66));
+      pointer-events: auto;
+      z-index: 20;
+    }
+
+    #messageOverlay.open {
+      display: grid;
+    }
+
+    #messageCard {
+      width: min(560px, calc(100vw - 48px));
+      padding: 24px 26px 20px;
+      border: 3px solid rgba(255, 190, 106, 0.72);
+      border-radius: 8px;
+      background:
+        linear-gradient(180deg, rgba(124, 74, 20, 0.96), rgba(57, 31, 10, 0.97));
+      color: #fff4cc;
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      line-height: 1.6;
+      text-shadow: 0 0 10px rgba(255, 216, 128, 0.65);
+      box-shadow:
+        0 0 42px rgba(255, 173, 70, 0.45),
+        inset 0 0 24px rgba(0, 0, 0, 0.35);
+    }
+
+    #messageText {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    #closeMessage {
+      margin-top: 16px;
+      border: 0;
+      background: transparent;
+      color: rgba(255, 223, 158, 0.72);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    #mobileControls {
+      position: fixed;
+      inset: 0;
+      display: none;
+      pointer-events: none;
+      z-index: 15;
+    }
+
+    #joystickBase {
+      position: absolute;
+      left: 28px;
+      bottom: 34px;
+      width: 104px;
+      height: 104px;
+      border: 2px solid rgba(255, 255, 255, 0.28);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 0 24px rgba(255, 190, 106, 0.18);
+    }
+
+    #joystickKnob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 44px;
+      height: 44px;
+      margin-left: -22px;
+      margin-top: -22px;
+      border: 1px solid rgba(255, 255, 255, 0.58);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.34);
+      transform: translate(0, 0);
+    }
+
+    #mobileHint {
+      position: absolute;
+      right: 20px;
+      bottom: 34px;
+      max-width: 170px;
+      color: rgba(255, 255, 255, 0.44);
+      font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-align: right;
+      text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+    }
+
+    .panel {
+      max-width: min(360px, calc(100vw - 36px));
+      padding: 12px 14px;
+      border: 1px solid var(--ui-border);
+      border-radius: 14px;
+      background: var(--ui-bg);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
+    }
+
+    .panel h1 {
+      margin: 0 0 6px;
+      font-size: 1rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .panel p {
+      margin: 0;
+      color: var(--ui-muted);
+      line-height: 1.4;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 720px) {
+      #hud {
+        flex-direction: column;
+      }
+
+      .panel {
+        max-width: calc(100vw - 36px);
+      }
+
+      #mobileControls {
+        display: block;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="hud">
+    <div class="panel">
+      <h1>Flower Lantern Valley</h1>
+      <p id="helpText">Loading blocky flower valley...</p>
+    </div>
+  </div>
+  <div id="crosshair" aria-hidden="true"></div>
+  <div id="mobileControls" aria-hidden="true">
+    <div id="joystickBase">
+      <div id="joystickKnob"></div>
+    </div>
+    <div id="mobileHint">Left side moves<br>Right side looks<br>Tap lanterns</div>
+  </div>
+  <div id="debugStatus">Page loaded. Waiting for Three.js...</div>
+  <div id="messageOverlay" aria-hidden="true">
+    <div id="messageCard" role="dialog" aria-modal="true" aria-live="polite">
+      <p id="messageText"></p>
+      <button id="closeMessage" type="button">[ tap to close ]</button>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener("error", function (event) {
+      var box = document.getElementById("debugStatus");
+      if (box) {
+        if (box.textContent.indexOf("WebGL failed") === 0 || box.textContent.indexOf("Fallback valley") === 0) return;
+        var detail = event.error && event.error.stack ? event.error.stack : event.message;
+        box.textContent = "JS error: " + detail + " at " + event.filename + ":" + event.lineno;
+      }
+    });
+    window.addEventListener("unhandledrejection", function (event) {
+      var box = document.getElementById("debugStatus");
+      if (box) box.textContent = "Promise error: " + (event.reason && event.reason.stack ? event.reason.stack : event.reason);
+    });
+  </script>
+  <script src="./three.min.js?v=base44-valley"></script>
+  <script src="./main.js?v=base44-valley-5"></script>
+</body>
+
+</html>
