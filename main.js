@@ -750,7 +750,6 @@ function setupMobileControls() {
   renderer.domElement.addEventListener("touchstart", (event) => {
     if (state.overview) {
       enterFirstPerson();
-      requestLandscapeMode();
       setStatus("Mobile first-person mode. Left side moves, right side looks.");
     }
     for (const touch of event.changedTouches) {
@@ -838,17 +837,6 @@ function enterFirstPerson() {
   state.pitch = 0;
   camera.rotation.set(0, 0, 0, "YXZ");
   updateCameraRotation();
-}
-
-function requestLandscapeMode() {
-  if (!isMobile) return;
-  const doc = document.documentElement;
-  if (doc.requestFullscreen && !document.fullscreenElement) {
-    doc.requestFullscreen().catch(() => {});
-  }
-  if (screen.orientation && screen.orientation.lock) {
-    screen.orientation.lock("landscape").catch(() => {});
-  }
 }
 
 function animate() {
