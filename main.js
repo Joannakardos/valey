@@ -951,11 +951,11 @@ function toggleMusic() {
   if (state.music.playing) {
     state.music.stop();
     ui.musicButton.classList.remove("on");
-    ui.musicButton.textContent = "♪";
+    ui.musicButton.textContent = "Music";
   } else {
     state.music.start();
     ui.musicButton.classList.add("on");
-    ui.musicButton.textContent = "♫";
+    ui.musicButton.textContent = "On";
   }
 }
 
@@ -968,7 +968,7 @@ function createSoftMusic() {
 
   const context = new AudioContext();
   const master = context.createGain();
-  master.gain.value = 0.055;
+  master.gain.value = 0.16;
   master.connect(context.destination);
 
   let playing = false;
@@ -998,6 +998,12 @@ function createSoftMusic() {
     gain.connect(master);
     osc.start(time);
     osc.stop(time + duration + 0.05);
+  }
+
+  function playStartChime(time) {
+    [0, 7, 12].forEach((interval, index) => {
+      schedulePluck(time + index * 0.08, noteToFreq(interval, 2), 1.2, 0.085);
+    });
   }
 
   function schedulePad(time, root) {
@@ -1045,12 +1051,15 @@ function createSoftMusic() {
       context.resume();
       playing = true;
       startedAt = context.currentTime + 0.1;
+      playStartChime(context.currentTime + 0.03);
       scheduleLoop();
+      setStatus("Music on.");
     },
     stop() {
       playing = false;
       timers.forEach((timer) => clearTimeout(timer));
       timers = [];
+      setStatus("Music off.");
     }
   };
 }
