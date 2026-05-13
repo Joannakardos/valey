@@ -204,6 +204,28 @@
       text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
     }
 
+    #musicButton {
+      position: fixed;
+      right: 18px;
+      top: 18px;
+      z-index: 25;
+      width: 42px;
+      height: 42px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 8px;
+      background: rgba(6, 10, 22, 0.68);
+      color: #fff4cc;
+      font: 18px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      box-shadow: 0 0 24px rgba(255, 190, 106, 0.15);
+      cursor: pointer;
+    }
+
+    #musicButton.on {
+      color: #ffffff;
+      border-color: rgba(255, 214, 150, 0.72);
+      box-shadow: 0 0 22px rgba(255, 204, 102, 0.45);
+    }
+
     .panel {
       max-width: min(360px, calc(100vw - 36px));
       padding: 12px 14px;
@@ -289,6 +311,14 @@
         right: 16px;
         bottom: 18px;
       }
+
+      #musicButton {
+        right: 12px;
+        top: 10px;
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+      }
     }
   </style>
 </head>
@@ -307,6 +337,7 @@
     </div>
     <div id="mobileHint">Left side moves<br>Right side looks<br>Tap lanterns</div>
   </div>
+  <button id="musicButton" type="button" title="Toggle music" aria-label="Toggle music">♪</button>
   <div id="debugStatus">Page loaded. Waiting for Three.js...</div>
   <div id="messageOverlay" aria-hidden="true">
     <div id="messageCard" role="dialog" aria-modal="true" aria-live="polite">
@@ -330,7 +361,7 @@
     });
   </script>
   <script src="./three.min.js?v=base44-valley"></script>
-  <script src="./main.js?v=base44-valley-7"></script>
+  <script src="./main.js?v=base44-valley-8"></script>
 </body>
 
 </html>

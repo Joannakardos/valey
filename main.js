@@ -10,6 +10,7 @@ const ui = {
   debugStatus: document.getElementById("debugStatus"),
   crosshair: document.getElementById("crosshair"),
   joystickKnob: document.getElementById("joystickKnob"),
+  musicButton: document.getElementById("musicButton"),
   messageOverlay: document.getElementById("messageOverlay"),
   messageText: document.getElementById("messageText"),
   closeMessage: document.getElementById("closeMessage")
@@ -59,6 +60,7 @@ const WORLD = {
 
 const MOON_POSITION = new THREE_NS.Vector3(20, 55, -30);
 const MOON_GAZE_SECONDS = new URLSearchParams(window.location.search).get("moonTest") === "1" ? 5 : 30 * 60;
+const CONSTELLATION_GAZE_SECONDS = 12;
 
 const scene = new THREE_NS.Scene();
 setStatus("Three.js loaded. Creating scene...");
@@ -109,11 +111,16 @@ const state = {
   overview: true,
   moonLookSeconds: 0,
   moonLoveRevealed: false,
-  moonLoveText: null
+  moonLoveText: null,
+  constellationLookSeconds: 0,
+  constellationRevealed: false,
+  constellationGroup: null,
+  music: null
 };
 
 const vegetation = [];
 const lanterns = [];
+const fireflies = [];
 let materials;
 
 try {
@@ -343,6 +350,8 @@ function buildScene() {
   buildTerrain();
   setStatus("Planting flowers and grass...");
   buildFlowers();
+  setStatus("Waking fireflies...");
+  buildFireflies();
   setStatus("Hanging lanterns...");
   buildLanterns();
 }
@@ -526,6 +535,52 @@ function spawnFlower(rand, x, y, z) {
   }
 }
 
+function createGlowTexture(size = 32) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 1, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, "rgba(255,250,190,1)");
+  gradient.addColorStop(0.22, "rgba(255,220,90,0.82)");
+  gradient.addColorStop(0.58, "rgba(180,255,150,0.24)");
+  gradient.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE_NS.CanvasTexture(canvas);
+  texture.colorSpace = THREE_NS.SRGBColorSpace;
+  texture.magFilter = THREE_NS.LinearFilter;
+  texture.minFilter = THREE_NS.LinearFilter;
+  return texture;
+}
+
+function buildFireflies() {
+  const rand = seededRandom(314);
+  const count = isMobile ? 55 : 95;
+  const texture = createGlowTexture();
+  for (let i = 0; i < count; i += 1) {
+    const angle = rand() * Math.PI * 2;
+    const dist = 4 + rand() * 24;
+    const x = Math.cos(angle) * dist;
+    const z = Math.sin(angle) * dist;
+    const sprite = new THREE_NS.Sprite(new THREE_NS.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.72,
+      blending: THREE_NS.AdditiveBlending
+    }));
+    sprite.scale.setScalar(0.18 + rand() * 0.2);
+    sprite.position.set(x, getHeight(x, z) + 1.2 + rand() * 4.4, z);
+    sprite.userData.base = sprite.position.clone();
+    sprite.userData.phase = rand() * Math.PI * 2;
+    sprite.userData.speed = 0.35 + rand() * 0.55;
+    sprite.userData.radius = 0.35 + rand() * 0.95;
+    fireflies.push(sprite);
+    scene.add(sprite);
+  }
+}
+
 function createLanternTexture() {
   const canvas = document.createElement("canvas");
   canvas.width = 16;
@@ -676,6 +731,11 @@ function buildSky() {
   state.moonLoveText.position.set(MOON_POSITION.x + 14, MOON_POSITION.y + 1, MOON_POSITION.z);
   state.moonLoveText.visible = false;
   scene.add(state.moonLoveText);
+
+  state.constellationGroup = createConstellationMessage();
+  state.constellationGroup.position.set(MOON_POSITION.x - 22, MOON_POSITION.y - 2, MOON_POSITION.z + 6);
+  state.constellationGroup.visible = false;
+  scene.add(state.constellationGroup);
 }
 
 function createMoonLoveText() {
@@ -704,6 +764,69 @@ function createMoonLoveText() {
   }));
   sprite.scale.set(18, 4.5, 1);
   return sprite;
+}
+
+function createConstellationMessage() {
+  const group = new THREE_NS.Group();
+  const starTexture = createGlowTexture(24);
+  const starMaterial = new THREE_NS.SpriteMaterial({
+    map: starTexture,
+    color: 0xeaf4ff,
+    transparent: true,
+    depthWrite: false,
+    opacity: 0.95,
+    blending: THREE_NS.AdditiveBlending
+  });
+
+  const heart = [
+    [-5, 1.8], [-4, 3], [-2.7, 3.3], [-1.7, 2.4], [0, 1.1],
+    [1.7, 2.4], [2.7, 3.3], [4, 3], [5, 1.8],
+    [4.2, 0.2], [2.6, -1.4], [1.2, -2.8], [0, -3.8],
+    [-1.2, -2.8], [-2.6, -1.4], [-4.2, 0.2]
+  ];
+
+  for (let i = 0; i < heart.length; i += 1) {
+    const star = new THREE_NS.Sprite(starMaterial.clone());
+    star.position.set(heart[i][0] * 0.65, heart[i][1] * 0.65 + 1.4, 0);
+    star.scale.setScalar(i % 4 === 0 ? 0.75 : 0.52);
+    star.userData.phase = i * 0.51;
+    group.add(star);
+  }
+
+  const lines = new THREE_NS.BufferGeometry();
+  const linePoints = [];
+  for (const point of heart) {
+    linePoints.push(point[0] * 0.65, point[1] * 0.65 + 1.4, -0.03);
+  }
+  linePoints.push(heart[0][0] * 0.65, heart[0][1] * 0.65 + 1.4, -0.03);
+  lines.setAttribute("position", new THREE_NS.Float32BufferAttribute(linePoints, 3));
+  group.add(new THREE_NS.Line(lines, new THREE_NS.LineBasicMaterial({
+    color: 0xdcecff,
+    transparent: true,
+    opacity: 0.34
+  })));
+
+  const textCanvas = document.createElement("canvas");
+  textCanvas.width = 512;
+  textCanvas.height = 128;
+  const ctx = textCanvas.getContext("2d");
+  ctx.font = "bold 46px ui-monospace, Menlo, Consolas, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText("I LOVE YOU", 256, 64);
+  const textTexture = new THREE_NS.CanvasTexture(textCanvas);
+  textTexture.colorSpace = THREE_NS.SRGBColorSpace;
+  const text = new THREE_NS.Sprite(new THREE_NS.SpriteMaterial({
+    map: textTexture,
+    transparent: true,
+    depthWrite: false
+  }));
+  text.position.set(0, -3.8, 0);
+  text.scale.set(11, 2.75, 1);
+  group.add(text);
+
+  return group;
 }
 
 function setupControls() {
@@ -815,6 +938,121 @@ function setupMessageUi() {
   ui.closeMessage.addEventListener("click", closeMessage);
   ui.messageOverlay.addEventListener("click", closeMessage);
   document.getElementById("messageCard").addEventListener("click", (event) => event.stopPropagation());
+  if (ui.musicButton) {
+    ui.musicButton.addEventListener("click", toggleMusic);
+  }
+}
+
+function toggleMusic() {
+  if (!state.music) {
+    state.music = createSoftMusic();
+  }
+
+  if (state.music.playing) {
+    state.music.stop();
+    ui.musicButton.classList.remove("on");
+    ui.musicButton.textContent = "♪";
+  } else {
+    state.music.start();
+    ui.musicButton.classList.add("on");
+    ui.musicButton.textContent = "♫";
+  }
+}
+
+function createSoftMusic() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) {
+    setStatus("Audio is not supported in this browser.");
+    return { playing: false, start() {}, stop() {} };
+  }
+
+  const context = new AudioContext();
+  const master = context.createGain();
+  master.gain.value = 0.055;
+  master.connect(context.destination);
+
+  let playing = false;
+  let timers = [];
+  let startedAt = 0;
+  const scale = [0, 2, 4, 7, 9, 12, 14, 16];
+  const melody = [4, 5, 7, 5, 4, 2, 0, 2, 4, 7, 9, 7, 5, 4, 2, 0];
+  const bass = [0, -5, -3, -7];
+
+  function noteToFreq(semitone, octaveOffset = 0) {
+    return 220 * Math.pow(2, (semitone + octaveOffset * 12) / 12);
+  }
+
+  function schedulePluck(time, freq, duration, gainValue) {
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    const filter = context.createBiquadFilter();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(freq, time);
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(1800, time);
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.exponentialRampToValueAtTime(gainValue, time + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    osc.start(time);
+    osc.stop(time + duration + 0.05);
+  }
+
+  function schedulePad(time, root) {
+    [0, 7, 12].forEach((interval) => {
+      const osc = context.createOscillator();
+      const gain = context.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(noteToFreq(root + interval, -1), time);
+      gain.gain.setValueAtTime(0.0001, time);
+      gain.gain.linearRampToValueAtTime(0.018, time + 1.4);
+      gain.gain.linearRampToValueAtTime(0.0001, time + 7.8);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(time);
+      osc.stop(time + 8.1);
+    });
+  }
+
+  function scheduleLoop() {
+    if (!playing) return;
+    const now = context.currentTime;
+    const baseTime = Math.max(now + 0.08, startedAt);
+    for (let bar = 0; bar < 4; bar += 1) {
+      const root = bass[bar % bass.length];
+      schedulePad(baseTime + bar * 4, root);
+      for (let step = 0; step < 4; step += 1) {
+        const t = baseTime + bar * 4 + step;
+        const note = scale[(bar + step) % scale.length] + root;
+        schedulePluck(t, noteToFreq(note, 1), 1.6, 0.035);
+      }
+    }
+    for (let i = 0; i < melody.length; i += 1) {
+      const note = melody[i];
+      schedulePluck(baseTime + i, noteToFreq(note, 2), 1.1, i % 4 === 0 ? 0.032 : 0.022);
+    }
+    startedAt = baseTime + 16;
+    timers.push(setTimeout(scheduleLoop, 15000));
+  }
+
+  return {
+    get playing() {
+      return playing;
+    },
+    start() {
+      context.resume();
+      playing = true;
+      startedAt = context.currentTime + 0.1;
+      scheduleLoop();
+    },
+    stop() {
+      playing = false;
+      timers.forEach((timer) => clearTimeout(timer));
+      timers = [];
+    }
+  };
 }
 
 function updateCameraRotation() {
@@ -846,7 +1084,9 @@ function animate() {
   updatePlayer(delta);
   updateTargeting();
   updateMoonGaze(delta);
+  updateConstellation(delta, elapsed);
   updateVegetation(elapsed);
+  updateFireflies(elapsed);
   updateLanterns(elapsed);
   renderer.render(scene, camera);
 }
@@ -884,6 +1124,19 @@ function updateVegetation(time) {
     const windZ = Math.cos(time * 1.1 + item.userData.phase * 0.8) * 0.03;
     item.position.x = item.userData.baseX + windX;
     item.position.z = item.userData.baseZ + windZ;
+  }
+}
+
+function updateFireflies(time) {
+  for (const fly of fireflies) {
+    const phase = fly.userData.phase;
+    const radius = fly.userData.radius;
+    const speed = fly.userData.speed;
+    const base = fly.userData.base;
+    fly.position.x = base.x + Math.sin(time * speed + phase) * radius;
+    fly.position.y = base.y + Math.sin(time * speed * 1.7 + phase * 0.8) * 0.42;
+    fly.position.z = base.z + Math.cos(time * speed * 0.9 + phase) * radius;
+    fly.material.opacity = 0.35 + (Math.sin(time * 2.3 + phase) * 0.5 + 0.5) * 0.55;
   }
 }
 
@@ -926,6 +1179,29 @@ function updateMoonGaze(delta) {
     state.moonLoveRevealed = true;
     state.moonLoveText.visible = true;
   }
+}
+
+function updateConstellation(delta, time) {
+  if (!state.constellationGroup || state.overview) return;
+
+  const cameraDirection = new THREE_NS.Vector3();
+  camera.getWorldDirection(cameraDirection);
+  const lookingHigh = cameraDirection.y > 0.52;
+
+  if (!state.constellationRevealed && lookingHigh) {
+    state.constellationLookSeconds += delta;
+    if (state.constellationLookSeconds >= CONSTELLATION_GAZE_SECONDS) {
+      state.constellationRevealed = true;
+      state.constellationGroup.visible = true;
+    }
+  }
+
+  if (!state.constellationGroup.visible) return;
+  state.constellationGroup.children.forEach((child, index) => {
+    if (child.isSprite && child.material) {
+      child.material.opacity = 0.72 + Math.sin(time * 2.1 + index * 0.6) * 0.18;
+    }
+  });
 }
 
 function findLanternInView() {
