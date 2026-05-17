@@ -63,7 +63,7 @@ const MOON_GAZE_SECONDS = new URLSearchParams(window.location.search).get("moonT
 const CONSTELLATION_GAZE_SECONDS = 12;
 const LAKE_INNER_RADIUS = 20.4;
 const LAKE_OUTER_RADIUS = 23.5;
-const LAKE_Y = 0.12;
+const LAKE_Y = -0.18;
 
 const scene = new THREE_NS.Scene();
 setStatus("Three.js loaded. Creating scene...");
@@ -340,9 +340,9 @@ function createMaterials() {
     lanternPaper: new THREE_NS.MeshBasicMaterial({ map: createLanternTexture(), transparent: true, opacity: 0.9 }),
     lanternSign: new THREE_NS.MeshLambertMaterial({ color: 0x8b6914 }),
     lake: new THREE_NS.MeshBasicMaterial({
-      color: 0x385f8f,
+      color: 0x1677c8,
       transparent: true,
-      opacity: 0.54,
+      opacity: 0.68,
       side: THREE_NS.DoubleSide,
       depthWrite: false
     }),
@@ -469,6 +469,20 @@ function buildLakeAndBoat() {
   glow.rotation.x = -Math.PI / 2;
   glow.position.y = LAKE_Y + 0.015;
   scene.add(glow);
+
+  const depthShadow = new THREE_NS.Mesh(
+    new THREE_NS.RingGeometry(LAKE_INNER_RADIUS + 0.25, LAKE_OUTER_RADIUS - 0.25, 96),
+    new THREE_NS.MeshBasicMaterial({
+      color: 0x052a55,
+      transparent: true,
+      opacity: 0.28,
+      side: THREE_NS.DoubleSide,
+      depthWrite: false
+    })
+  );
+  depthShadow.rotation.x = -Math.PI / 2;
+  depthShadow.position.y = LAKE_Y - 0.24;
+  scene.add(depthShadow);
 
   state.boat = createRowboat();
   scene.add(state.boat.group);
@@ -761,7 +775,7 @@ function buildKoiFish() {
   ];
   const geo = new THREE_NS.PlaneGeometry(0.9, 0.42);
   const rand = seededRandom(515);
-  const count = isMobile ? 10 : 16;
+  const count = 20;
   for (let i = 0; i < count; i += 1) {
     const mat = new THREE_NS.MeshBasicMaterial({
       map: createKoiTexture(palettes[i % palettes.length]),
@@ -777,7 +791,7 @@ function buildKoiFish() {
       mesh,
       angle,
       radius,
-      speed: 0.035 + rand() * 0.045,
+      speed: 0.42 + rand() * 0.18,
       phase: rand() * Math.PI * 2
     });
     scene.add(mesh);
@@ -1142,13 +1156,21 @@ function setupMessageUi() {
   ui.messageOverlay.addEventListener("click", closeMessage);
   document.getElementById("messageCard").addEventListener("click", (event) => event.stopPropagation());
   if (ui.musicButton) {
+    let lastMusicPress = 0;
     const handleMusicPress = (event) => {
       event.preventDefault();
       event.stopPropagation();
+      const now = performance.now();
+      if (now - lastMusicPress < 450) return;
+      lastMusicPress = now;
       toggleMusic();
     };
-    ui.musicButton.addEventListener("pointerdown", handleMusicPress);
-    ui.musicButton.addEventListener("touchend", handleMusicPress, { passive: false });
+    if (window.PointerEvent) {
+      ui.musicButton.addEventListener("pointerup", handleMusicPress);
+    } else {
+      ui.musicButton.addEventListener("touchend", handleMusicPress, { passive: false });
+      ui.musicButton.addEventListener("click", handleMusicPress);
+    }
   }
 }
 
@@ -1330,8 +1352,14 @@ function updatePlayer(delta) {
     return;
   }
 
-  const inputX = (state.keys.has("d") ? 1 : 0) - (state.keys.has("a") || state.keys.has("q") ? 1 : 0) + state.joystick.x;
-  const inputZ = (state.keys.has("s") ? 1 : 0) - (state.keys.has("w") || state.keys.has("z") ? 1 : 0) + state.joystick.y;
+  const inputX =
+    (state.keys.has("d") || state.keys.has("arrowright") ? 1 : 0) -
+    (state.keys.has("a") || state.keys.has("q") || state.keys.has("arrowleft") ? 1 : 0) +
+    state.joystick.x;
+  const inputZ =
+    (state.keys.has("s") || state.keys.has("arrowdown") ? 1 : 0) -
+    (state.keys.has("w") || state.keys.has("z") || state.keys.has("arrowup") ? 1 : 0) +
+    state.joystick.y;
   const yawOnly = new THREE_NS.Euler(0, state.yaw, 0);
   const direction = new THREE_NS.Vector3(inputX, 0, inputZ);
   if (direction.lengthSq() > 0.001) {
@@ -1343,7 +1371,18 @@ function updatePlayer(delta) {
     camera.position.x *= WORLD.walkLimit / radius;
     camera.position.z *= WORLD.walkLimit / radius;
   }
-  camera.position.y = getHeight(camera.position.x, camera.position.z) + WORLD.eyeHeight;
+  const groundY = getHeight(camera.position.x, camera.position.z);
+  const lakeDepth = getLakeDepthAt(camera.position.x, camera.position.z);
+  camera.position.y = groundY + WORLD.eyeHeight - lakeDepth;
+}
+
+function getLakeDepthAt(x, z) {
+  const radius = Math.hypot(x, z);
+  if (radius < LAKE_INNER_RADIUS || radius > LAKE_OUTER_RADIUS) return 0;
+  const center = (LAKE_INNER_RADIUS + LAKE_OUTER_RADIUS) * 0.5;
+  const halfWidth = (LAKE_OUTER_RADIUS - LAKE_INNER_RADIUS) * 0.5;
+  const t = 1 - Math.min(1, Math.abs(radius - center) / halfWidth);
+  return 0.72 * t;
 }
 
 function updateBoat(delta, time) {
@@ -1390,7 +1429,7 @@ function updateKoiFish(time) {
       LAKE_Y + 0.035,
       Math.sin(koi.angle) * radius
     );
-    koi.mesh.rotation.z = -koi.angle + Math.PI / 2 + Math.sin(time * 3 + koi.phase) * 0.18;
+    koi.mesh.rotation.z = -koi.angle - Math.PI / 2 + Math.sin(time * 3 + koi.phase) * 0.18;
   }
 }
 
