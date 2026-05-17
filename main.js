@@ -61,6 +61,9 @@ const WORLD = {
 const MOON_POSITION = new THREE_NS.Vector3(20, 55, -30);
 const MOON_GAZE_SECONDS = new URLSearchParams(window.location.search).get("moonTest") === "1" ? 5 : 30 * 60;
 const CONSTELLATION_GAZE_SECONDS = 12;
+const LAKE_INNER_RADIUS = 20.4;
+const LAKE_OUTER_RADIUS = 23.5;
+const LAKE_Y = 0.12;
 
 const scene = new THREE_NS.Scene();
 setStatus("Three.js loaded. Creating scene...");
@@ -115,12 +118,16 @@ const state = {
   constellationLookSeconds: 0,
   constellationRevealed: false,
   constellationGroup: null,
-  music: null
+  music: null,
+  boat: null,
+  onBoat: false
 };
 
 const vegetation = [];
 const lanterns = [];
 const fireflies = [];
+const rareFlowers = [];
+const koiFish = [];
 let materials;
 
 try {
@@ -331,7 +338,16 @@ function createMaterials() {
     andesite: new THREE_NS.MeshLambertMaterial({ map: andesite }),
     lanternFrame: new THREE_NS.MeshLambertMaterial({ color: 0xc4a96b }),
     lanternPaper: new THREE_NS.MeshBasicMaterial({ map: createLanternTexture(), transparent: true, opacity: 0.9 }),
-    lanternSign: new THREE_NS.MeshLambertMaterial({ color: 0x8b6914 })
+    lanternSign: new THREE_NS.MeshLambertMaterial({ color: 0x8b6914 }),
+    lake: new THREE_NS.MeshBasicMaterial({
+      color: 0x385f8f,
+      transparent: true,
+      opacity: 0.54,
+      side: THREE_NS.DoubleSide,
+      depthWrite: false
+    }),
+    boatWood: new THREE_NS.MeshLambertMaterial({ color: 0x7b4a28 }),
+    boatTrim: new THREE_NS.MeshLambertMaterial({ color: 0xd1ad73 })
   };
 }
 
@@ -348,8 +364,12 @@ function buildScene() {
   buildSky();
   setStatus("Building blocky mountains...");
   buildTerrain();
+  setStatus("Filling the mountain lake...");
+  buildLakeAndBoat();
   setStatus("Planting flowers and grass...");
   buildFlowers();
+  setStatus("Growing rare flowers...");
+  buildRareFlowers();
   setStatus("Waking fireflies...");
   buildFireflies();
   setStatus("Hanging lanterns...");
@@ -424,6 +444,76 @@ function buildTerrain() {
     mesh.instanceMatrix.needsUpdate = true;
     scene.add(mesh);
   });
+}
+
+function buildLakeAndBoat() {
+  const water = new THREE_NS.Mesh(
+    new THREE_NS.RingGeometry(LAKE_INNER_RADIUS, LAKE_OUTER_RADIUS, 96),
+    materials.lake
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = LAKE_Y;
+  water.renderOrder = 1;
+  scene.add(water);
+
+  const glow = new THREE_NS.Mesh(
+    new THREE_NS.RingGeometry(LAKE_INNER_RADIUS + 0.08, LAKE_OUTER_RADIUS - 0.08, 96),
+    new THREE_NS.MeshBasicMaterial({
+      color: 0x7ab6ff,
+      transparent: true,
+      opacity: 0.08,
+      side: THREE_NS.DoubleSide,
+      depthWrite: false
+    })
+  );
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = LAKE_Y + 0.015;
+  scene.add(glow);
+
+  state.boat = createRowboat();
+  scene.add(state.boat.group);
+  buildKoiFish();
+}
+
+function createRowboat() {
+  const group = new THREE_NS.Group();
+  const hull = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(1.15, 0.32, 2.5), materials.boatWood);
+  hull.position.y = 0.22;
+  group.add(hull);
+
+  const bow = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(0.75, 0.28, 0.42), materials.boatWood);
+  bow.position.set(0, 0.24, -1.38);
+  bow.rotation.x = 0.28;
+  group.add(bow);
+
+  const stern = bow.clone();
+  stern.position.z = 1.38;
+  stern.rotation.x = -0.28;
+  group.add(stern);
+
+  for (const z of [-0.55, 0.55]) {
+    const seat = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(0.9, 0.08, 0.24), materials.boatTrim);
+    seat.position.set(0, 0.48, z);
+    group.add(seat);
+  }
+
+  const leftOar = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(0.08, 0.06, 2.2), materials.boatTrim);
+  leftOar.position.set(-0.9, 0.45, 0);
+  leftOar.rotation.y = 0.95;
+  group.add(leftOar);
+
+  const rightOar = leftOar.clone();
+  rightOar.position.x = 0.9;
+  rightOar.rotation.y = -0.95;
+  group.add(rightOar);
+
+  return {
+    group,
+    angle: 0.55,
+    radius: (LAKE_INNER_RADIUS + LAKE_OUTER_RADIUS) * 0.5,
+    speed: 0.045,
+    bobPhase: 1.7
+  };
 }
 
 function createFlowerTexture(flower) {
@@ -535,6 +625,63 @@ function spawnFlower(rand, x, y, z) {
   }
 }
 
+function buildRareFlowers() {
+  const rare = [
+    { angle: 0.18, color: [255, 255, 255], glow: 0xdff7ff },
+    { angle: 1.36, color: [255, 115, 210], glow: 0xff83e0 },
+    { angle: 2.58, color: [120, 210, 255], glow: 0x86dcff },
+    { angle: 3.85, color: [255, 236, 92], glow: 0xffeb7a },
+    { angle: 5.08, color: [170, 110, 255], glow: 0xb889ff }
+  ];
+
+  rare.forEach((flower, index) => {
+    const radius = 19.2 + (index % 2) * 0.7;
+    const x = Math.cos(flower.angle) * radius;
+    const z = Math.sin(flower.angle) * radius;
+    const sprite = createRareFlowerSprite(flower.color);
+    sprite.position.set(x, getHeight(x, z) + 0.75, z);
+    sprite.scale.set(1.05, 1.65, 1.05);
+    sprite.userData.baseX = x;
+    sprite.userData.baseZ = z;
+    sprite.userData.phase = index * 1.37;
+    rareFlowers.push(sprite);
+    vegetation.push(sprite);
+    scene.add(sprite);
+
+    const light = new THREE_NS.PointLight(flower.glow, 0.85, 8, 2);
+    light.position.set(x, sprite.position.y + 0.7, z);
+    scene.add(light);
+  });
+}
+
+function createRareFlowerSprite(color) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 24;
+  canvas.height = 40;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#286b28";
+  ctx.fillRect(11, 16, 3, 24);
+  ctx.fillRect(7, 27, 5, 2);
+  ctx.fillRect(14, 31, 5, 2);
+  const [r, g, b] = color;
+  ctx.fillStyle = `rgba(${r},${g},${b},0.22)`;
+  ctx.fillRect(1, 1, 22, 22);
+  ctx.fillStyle = `rgb(${r},${g},${b})`;
+  ctx.fillRect(7, 4, 10, 16);
+  ctx.fillRect(4, 7, 16, 10);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(10, 9, 5, 5);
+  const texture = new THREE_NS.CanvasTexture(canvas);
+  texture.magFilter = THREE_NS.NearestFilter;
+  texture.minFilter = THREE_NS.NearestFilter;
+  texture.colorSpace = THREE_NS.SRGBColorSpace;
+  return new THREE_NS.Sprite(new THREE_NS.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    alphaTest: 0.1
+  }));
+}
+
 function createGlowTexture(size = 32) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -578,6 +725,62 @@ function buildFireflies() {
     sprite.userData.radius = 0.35 + rand() * 0.95;
     fireflies.push(sprite);
     scene.add(sprite);
+  }
+}
+
+function createKoiTexture(colors) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 32;
+  canvas.height = 16;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, 32, 16);
+  ctx.fillStyle = colors.body;
+  ctx.fillRect(8, 5, 17, 6);
+  ctx.fillRect(11, 3, 10, 10);
+  ctx.fillStyle = colors.spot;
+  ctx.fillRect(12, 4, 5, 4);
+  ctx.fillRect(20, 8, 4, 3);
+  ctx.fillStyle = colors.tail;
+  ctx.fillRect(3, 3, 6, 4);
+  ctx.fillRect(3, 9, 6, 4);
+  ctx.fillStyle = "#0b1118";
+  ctx.fillRect(24, 6, 2, 2);
+  const texture = new THREE_NS.CanvasTexture(canvas);
+  texture.magFilter = THREE_NS.NearestFilter;
+  texture.minFilter = THREE_NS.NearestFilter;
+  texture.colorSpace = THREE_NS.SRGBColorSpace;
+  return texture;
+}
+
+function buildKoiFish() {
+  const palettes = [
+    { body: "#fff7e6", spot: "#e94a2f", tail: "#fff7e6" },
+    { body: "#f4f0dc", spot: "#202020", tail: "#e94a2f" },
+    { body: "#ffd880", spot: "#f06b32", tail: "#fff3c4" },
+    { body: "#ffffff", spot: "#f06b32", tail: "#ffffff" }
+  ];
+  const geo = new THREE_NS.PlaneGeometry(0.9, 0.42);
+  const rand = seededRandom(515);
+  const count = isMobile ? 10 : 16;
+  for (let i = 0; i < count; i += 1) {
+    const mat = new THREE_NS.MeshBasicMaterial({
+      map: createKoiTexture(palettes[i % palettes.length]),
+      transparent: true,
+      side: THREE_NS.DoubleSide,
+      depthWrite: false
+    });
+    const mesh = new THREE_NS.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    const angle = rand() * Math.PI * 2;
+    const radius = LAKE_INNER_RADIUS + 0.7 + rand() * (LAKE_OUTER_RADIUS - LAKE_INNER_RADIUS - 1.4);
+    koiFish.push({
+      mesh,
+      angle,
+      radius,
+      speed: 0.035 + rand() * 0.045,
+      phase: rand() * Math.PI * 2
+    });
+    scene.add(mesh);
   }
 }
 
@@ -840,7 +1043,7 @@ function setupControls() {
         renderer.domElement.requestPointerLock();
         return;
       }
-      interactWithLantern();
+      interactWithWorld();
     });
     document.addEventListener("pointerlockchange", () => {
       state.pointerLocked = document.pointerLockElement === renderer.domElement;
@@ -920,7 +1123,7 @@ function clearTouch(event) {
     } else if (touch.identifier === state.lookTouchId) {
       const drag = Math.hypot(touch.clientX - state.lookStartX, touch.clientY - state.lookStartY);
       state.lookTouchId = null;
-      if (drag < 12) interactWithLantern();
+      if (drag < 12) interactWithWorld();
     }
   }
 }
@@ -939,7 +1142,13 @@ function setupMessageUi() {
   ui.messageOverlay.addEventListener("click", closeMessage);
   document.getElementById("messageCard").addEventListener("click", (event) => event.stopPropagation());
   if (ui.musicButton) {
-    ui.musicButton.addEventListener("click", toggleMusic);
+    const handleMusicPress = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleMusic();
+    };
+    ui.musicButton.addEventListener("pointerdown", handleMusicPress);
+    ui.musicButton.addEventListener("touchend", handleMusicPress, { passive: false });
   }
 }
 
@@ -968,7 +1177,7 @@ function createSoftMusic() {
 
   const context = new AudioContext();
   const master = context.createGain();
-  master.gain.value = 0.16;
+  master.gain.value = isMobile ? 0.28 : 0.16;
   master.connect(context.destination);
 
   let playing = false;
@@ -1002,7 +1211,7 @@ function createSoftMusic() {
 
   function playStartChime(time) {
     [0, 7, 12].forEach((interval, index) => {
-      schedulePluck(time + index * 0.08, noteToFreq(interval, 2), 1.2, 0.085);
+      schedulePluck(time + index * 0.08, noteToFreq(interval, 2), 1.25, isMobile ? 0.16 : 0.085);
     });
   }
 
@@ -1048,12 +1257,15 @@ function createSoftMusic() {
       return playing;
     },
     start() {
-      context.resume();
-      playing = true;
-      startedAt = context.currentTime + 0.1;
-      playStartChime(context.currentTime + 0.03);
-      scheduleLoop();
-      setStatus("Music on.");
+      context.resume().then(() => {
+        playing = true;
+        startedAt = context.currentTime + 0.1;
+        playStartChime(context.currentTime + 0.03);
+        scheduleLoop();
+        setStatus("Music on.");
+      }).catch(() => {
+        setStatus("Tap Music again to unlock phone audio.");
+      });
     },
     stop() {
       playing = false;
@@ -1090,12 +1302,14 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = Math.min(clock.getDelta(), 0.033);
   const elapsed = clock.getElapsedTime();
+  updateBoat(delta, elapsed);
   updatePlayer(delta);
   updateTargeting();
   updateMoonGaze(delta);
   updateConstellation(delta, elapsed);
   updateVegetation(elapsed);
   updateFireflies(elapsed);
+  updateKoiFish(elapsed);
   updateLanterns(elapsed);
   renderer.render(scene, camera);
 }
@@ -1107,6 +1321,12 @@ function updatePlayer(delta) {
     camera.position.z = 27 + Math.cos(time * 0.18) * 7;
     camera.position.y = 17 + Math.sin(time * 0.12) * 2;
     camera.lookAt(0, 1.5, 0);
+    return;
+  }
+
+  if (state.onBoat && state.boat) {
+    const boat = state.boat.group;
+    camera.position.set(boat.position.x, boat.position.y + 1.25, boat.position.z);
     return;
   }
 
@@ -1124,6 +1344,17 @@ function updatePlayer(delta) {
     camera.position.z *= WORLD.walkLimit / radius;
   }
   camera.position.y = getHeight(camera.position.x, camera.position.z) + WORLD.eyeHeight;
+}
+
+function updateBoat(delta, time) {
+  if (!state.boat) return;
+  const boat = state.boat;
+  boat.angle += delta * boat.speed;
+  const x = Math.cos(boat.angle) * boat.radius;
+  const z = Math.sin(boat.angle) * boat.radius;
+  boat.group.position.set(x, LAKE_Y + 0.26 + Math.sin(time * 1.25 + boat.bobPhase) * 0.045, z);
+  boat.group.rotation.y = -boat.angle + Math.PI / 2;
+  boat.group.rotation.z = Math.sin(time * 1.1 + boat.bobPhase) * 0.025;
 }
 
 function updateVegetation(time) {
@@ -1146,6 +1377,20 @@ function updateFireflies(time) {
     fly.position.y = base.y + Math.sin(time * speed * 1.7 + phase * 0.8) * 0.42;
     fly.position.z = base.z + Math.cos(time * speed * 0.9 + phase) * radius;
     fly.material.opacity = 0.35 + (Math.sin(time * 2.3 + phase) * 0.5 + 0.5) * 0.55;
+  }
+}
+
+function updateKoiFish(time) {
+  for (const koi of koiFish) {
+    koi.angle += koi.speed * 0.016;
+    const wiggle = Math.sin(time * 1.6 + koi.phase) * 0.18;
+    const radius = koi.radius + wiggle;
+    koi.mesh.position.set(
+      Math.cos(koi.angle) * radius,
+      LAKE_Y + 0.035,
+      Math.sin(koi.angle) * radius
+    );
+    koi.mesh.rotation.z = -koi.angle + Math.PI / 2 + Math.sin(time * 3 + koi.phase) * 0.18;
   }
 }
 
@@ -1233,6 +1478,30 @@ function setHighlightedLantern(lantern) {
   if (state.highlightedLantern === lantern) return;
   state.highlightedLantern = lantern;
   ui.crosshair.classList.toggle("active", Boolean(lantern));
+}
+
+function interactWithWorld() {
+  if (tryBoatInteraction()) return;
+  interactWithLantern();
+}
+
+function tryBoatInteraction() {
+  if (!state.boat || state.activeMessage || state.overview) return false;
+
+  if (state.onBoat) {
+    state.onBoat = false;
+    const boat = state.boat.group;
+    camera.position.set(boat.position.x + 1.35, getHeight(boat.position.x + 1.35, boat.position.z) + WORLD.eyeHeight, boat.position.z);
+    setStatus("You stepped off the boat.");
+    return true;
+  }
+
+  const distance = camera.position.distanceTo(state.boat.group.position);
+  if (distance > 4.2) return false;
+  state.onBoat = true;
+  state.velocity?.set?.(0, 0, 0);
+  setStatus("You boarded the rowboat. Tap/click again to leave.");
+  return true;
 }
 
 function interactWithLantern() {
