@@ -61,9 +61,9 @@ const WORLD = {
 const MOON_POSITION = new THREE_NS.Vector3(20, 55, -30);
 const MOON_GAZE_SECONDS = new URLSearchParams(window.location.search).get("moonTest") === "1" ? 5 : 30 * 60;
 const CONSTELLATION_GAZE_SECONDS = 12;
-const LAKE_INNER_RADIUS = 18.6;
-const LAKE_OUTER_RADIUS = 25.4;
-const LAKE_Y = 0.72;
+const LAKE_INNER_RADIUS = 20.2;
+const LAKE_OUTER_RADIUS = 23.4;
+const LAKE_Y = 0.58;
 
 const scene = new THREE_NS.Scene();
 setStatus("Three.js loaded. Creating scene...");
@@ -489,9 +489,43 @@ function buildLakeAndBoat() {
   depthShadow.renderOrder = 3;
   scene.add(depthShadow);
 
+  buildLakeShoreline();
+
   state.boat = createRowboat();
   scene.add(state.boat.group);
   buildKoiFish();
+}
+
+function buildLakeShoreline() {
+  const block = new THREE_NS.BoxGeometry(1, 0.18, 1);
+  const inner = new THREE_NS.InstancedMesh(block, materials.grass, 180);
+  const outer = new THREE_NS.InstancedMesh(block, materials.stone, 220);
+  let innerCount = 0;
+  let outerCount = 0;
+
+  for (let i = 0; i < 180; i += 1) {
+    const angle = (i / 180) * Math.PI * 2;
+    const radius = LAKE_INNER_RADIUS - 0.45 + Math.sin(i * 1.9) * 0.08;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+    tempMatrix.setPosition(x, LAKE_Y + 0.02, z);
+    inner.setMatrixAt(innerCount++, tempMatrix);
+  }
+
+  for (let i = 0; i < 220; i += 1) {
+    const angle = (i / 220) * Math.PI * 2;
+    const radius = LAKE_OUTER_RADIUS + 0.45 + Math.sin(i * 2.3) * 0.08;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+    tempMatrix.setPosition(x, LAKE_Y + 0.08, z);
+    outer.setMatrixAt(outerCount++, tempMatrix);
+  }
+
+  inner.count = innerCount;
+  outer.count = outerCount;
+  inner.instanceMatrix.needsUpdate = true;
+  outer.instanceMatrix.needsUpdate = true;
+  scene.add(inner, outer);
 }
 
 function createRowboat() {
