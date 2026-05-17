@@ -61,9 +61,9 @@ const WORLD = {
 const MOON_POSITION = new THREE_NS.Vector3(20, 55, -30);
 const MOON_GAZE_SECONDS = new URLSearchParams(window.location.search).get("moonTest") === "1" ? 5 : 30 * 60;
 const CONSTELLATION_GAZE_SECONDS = 12;
-const LAKE_INNER_RADIUS = 20.4;
-const LAKE_OUTER_RADIUS = 23.5;
-const LAKE_Y = -0.18;
+const LAKE_INNER_RADIUS = 18.6;
+const LAKE_OUTER_RADIUS = 25.4;
+const LAKE_Y = 0.72;
 
 const scene = new THREE_NS.Scene();
 setStatus("Three.js loaded. Creating scene...");
@@ -340,11 +340,12 @@ function createMaterials() {
     lanternPaper: new THREE_NS.MeshBasicMaterial({ map: createLanternTexture(), transparent: true, opacity: 0.9 }),
     lanternSign: new THREE_NS.MeshLambertMaterial({ color: 0x8b6914 }),
     lake: new THREE_NS.MeshBasicMaterial({
-      color: 0x1677c8,
+      color: 0x1f8fe8,
       transparent: true,
-      opacity: 0.68,
+      opacity: 0.78,
       side: THREE_NS.DoubleSide,
-      depthWrite: false
+      depthWrite: false,
+      depthTest: false
     }),
     boatWood: new THREE_NS.MeshLambertMaterial({ color: 0x7b4a28 }),
     boatTrim: new THREE_NS.MeshLambertMaterial({ color: 0xd1ad73 })
@@ -453,7 +454,7 @@ function buildLakeAndBoat() {
   );
   water.rotation.x = -Math.PI / 2;
   water.position.y = LAKE_Y;
-  water.renderOrder = 1;
+  water.renderOrder = 4;
   scene.add(water);
 
   const glow = new THREE_NS.Mesh(
@@ -461,13 +462,15 @@ function buildLakeAndBoat() {
     new THREE_NS.MeshBasicMaterial({
       color: 0x7ab6ff,
       transparent: true,
-      opacity: 0.08,
+      opacity: 0.2,
       side: THREE_NS.DoubleSide,
-      depthWrite: false
+      depthWrite: false,
+      depthTest: false
     })
   );
   glow.rotation.x = -Math.PI / 2;
   glow.position.y = LAKE_Y + 0.015;
+  glow.renderOrder = 5;
   scene.add(glow);
 
   const depthShadow = new THREE_NS.Mesh(
@@ -477,11 +480,13 @@ function buildLakeAndBoat() {
       transparent: true,
       opacity: 0.28,
       side: THREE_NS.DoubleSide,
-      depthWrite: false
+      depthWrite: false,
+      depthTest: false
     })
   );
   depthShadow.rotation.x = -Math.PI / 2;
   depthShadow.position.y = LAKE_Y - 0.24;
+  depthShadow.renderOrder = 3;
   scene.add(depthShadow);
 
   state.boat = createRowboat();
@@ -773,7 +778,7 @@ function buildKoiFish() {
     { body: "#ffd880", spot: "#f06b32", tail: "#fff3c4" },
     { body: "#ffffff", spot: "#f06b32", tail: "#ffffff" }
   ];
-  const geo = new THREE_NS.PlaneGeometry(0.9, 0.42);
+  const geo = new THREE_NS.PlaneGeometry(1.45, 0.68);
   const rand = seededRandom(515);
   const count = 20;
   for (let i = 0; i < count; i += 1) {
@@ -781,10 +786,12 @@ function buildKoiFish() {
       map: createKoiTexture(palettes[i % palettes.length]),
       transparent: true,
       side: THREE_NS.DoubleSide,
-      depthWrite: false
+      depthWrite: false,
+      depthTest: false
     });
     const mesh = new THREE_NS.Mesh(geo, mat);
     mesh.rotation.x = -Math.PI / 2;
+    mesh.renderOrder = 7;
     const angle = rand() * Math.PI * 2;
     const radius = LAKE_INNER_RADIUS + 0.7 + rand() * (LAKE_OUTER_RADIUS - LAKE_INNER_RADIUS - 1.4);
     koiFish.push({
@@ -1426,7 +1433,7 @@ function updateKoiFish(time) {
     const radius = koi.radius + wiggle;
     koi.mesh.position.set(
       Math.cos(koi.angle) * radius,
-      LAKE_Y + 0.035,
+      LAKE_Y + 0.095,
       Math.sin(koi.angle) * radius
     );
     koi.mesh.rotation.z = -koi.angle - Math.PI / 2 + Math.sin(time * 3 + koi.phase) * 0.18;
