@@ -61,9 +61,9 @@ const WORLD = {
 const MOON_POSITION = new THREE_NS.Vector3(20, 55, -30);
 const MOON_GAZE_SECONDS = new URLSearchParams(window.location.search).get("moonTest") === "1" ? 5 : 30 * 60;
 const CONSTELLATION_GAZE_SECONDS = 12;
-const LAKE_INNER_RADIUS = 20.2;
-const LAKE_OUTER_RADIUS = 23.4;
-const LAKE_Y = 0.58;
+const LAKE_INNER_RADIUS = 20.65;
+const LAKE_OUTER_RADIUS = 22.35;
+const LAKE_Y = 0.62;
 
 const scene = new THREE_NS.Scene();
 setStatus("Three.js loaded. Creating scene...");
@@ -500,8 +500,10 @@ function buildLakeShoreline() {
   const block = new THREE_NS.BoxGeometry(1, 0.18, 1);
   const inner = new THREE_NS.InstancedMesh(block, materials.grass, 180);
   const outer = new THREE_NS.InstancedMesh(block, materials.stone, 220);
+  const mountainFoot = new THREE_NS.InstancedMesh(new THREE_NS.BoxGeometry(1, 0.55, 1), materials.grass, 420);
   let innerCount = 0;
   let outerCount = 0;
+  let footCount = 0;
 
   for (let i = 0; i < 180; i += 1) {
     const angle = (i / 180) * Math.PI * 2;
@@ -521,37 +523,52 @@ function buildLakeShoreline() {
     outer.setMatrixAt(outerCount++, tempMatrix);
   }
 
+  for (let ring = 0; ring < 3; ring += 1) {
+    const samples = 132 + ring * 18;
+    const radius = LAKE_OUTER_RADIUS + 1.0 + ring * 0.82;
+    for (let i = 0; i < samples; i += 1) {
+      const angle = (i / samples) * Math.PI * 2;
+      const wobble = Math.sin(i * 1.3 + ring * 2.1) * 0.12;
+      const x = Math.cos(angle) * (radius + wobble);
+      const z = Math.sin(angle) * (radius + wobble);
+      tempMatrix.setPosition(x, getHeight(x, z) + 0.02, z);
+      mountainFoot.setMatrixAt(footCount++, tempMatrix);
+    }
+  }
+
   inner.count = innerCount;
   outer.count = outerCount;
+  mountainFoot.count = footCount;
   inner.instanceMatrix.needsUpdate = true;
   outer.instanceMatrix.needsUpdate = true;
-  scene.add(inner, outer);
+  mountainFoot.instanceMatrix.needsUpdate = true;
+  scene.add(inner, outer, mountainFoot);
 }
 
 function createRowboat() {
   const group = new THREE_NS.Group();
-  const hull = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(1.15, 0.32, 2.5), materials.boatWood);
+  const hull = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(1.45, 0.38, 3.05), materials.boatWood);
   hull.position.y = 0.22;
   group.add(hull);
 
-  const bow = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(0.75, 0.28, 0.42), materials.boatWood);
-  bow.position.set(0, 0.24, -1.38);
+  const bow = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(0.95, 0.34, 0.48), materials.boatWood);
+  bow.position.set(0, 0.25, -1.68);
   bow.rotation.x = 0.28;
   group.add(bow);
 
   const stern = bow.clone();
-  stern.position.z = 1.38;
+  stern.position.z = 1.68;
   stern.rotation.x = -0.28;
   group.add(stern);
 
   for (const z of [-0.55, 0.55]) {
-    const seat = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(0.9, 0.08, 0.24), materials.boatTrim);
+    const seat = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(1.12, 0.09, 0.28), materials.boatTrim);
     seat.position.set(0, 0.48, z);
     group.add(seat);
   }
 
-  const leftOar = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(0.08, 0.06, 2.2), materials.boatTrim);
-  leftOar.position.set(-0.9, 0.45, 0);
+  const leftOar = new THREE_NS.Mesh(new THREE_NS.BoxGeometry(0.09, 0.07, 2.75), materials.boatTrim);
+  leftOar.position.set(-1.08, 0.48, 0);
   leftOar.rotation.y = 0.95;
   group.add(leftOar);
 
@@ -562,7 +579,7 @@ function createRowboat() {
 
   return {
     group,
-    angle: 0.55,
+    angle: Math.PI / 2,
     radius: (LAKE_INNER_RADIUS + LAKE_OUTER_RADIUS) * 0.5,
     speed: 0.045,
     bobPhase: 1.7
@@ -1577,7 +1594,7 @@ function tryBoatInteraction() {
   }
 
   const distance = camera.position.distanceTo(state.boat.group.position);
-  if (distance > 4.2) return false;
+  if (distance > 5.8) return false;
   state.onBoat = true;
   state.velocity?.set?.(0, 0, 0);
   setStatus("You boarded the rowboat. Tap/click again to leave.");
