@@ -20,15 +20,19 @@
   // 1. CONFIGURATION — à personnaliser
   // ============================================================
   const CONFIG = {
-    // Prochaine occurrence du 20 septembre a minuit a La Reunion (UTC+4).
+    // L'événement démarre 2 minutes après l'ouverture de la page.
+    // (Ancienne version basée sur le 20 septembre conservée en commentaire ci-dessous.)
     getTargetDate() {
-      const now = new Date();
-      let target = new Date(Date.UTC(now.getUTCFullYear(), 8, 19, 20, 0, 0, 0));
-      if (target.getTime() <= now.getTime()) {
-        target = new Date(Date.UTC(now.getUTCFullYear() + 1, 8, 19, 20, 0, 0, 0));
-      }
-      return target;
+      return new Date(Date.now() + 2 * 60 * 1000);
     },
+    // getTargetDate() {
+    //   const now = new Date();
+    //   let target = new Date(now.getFullYear(), 8, 20, 0, 0, 0, 0); // mois 8 = septembre
+    //   if (target.getTime() <= now.getTime()) {
+    //     target = new Date(now.getFullYear() + 1, 8, 20, 0, 0, 0, 0);
+    //   }
+    //   return target;
+    // },
     finalText: "Joyeux anniversaire de nos 20 mois mon amour",
     riverDuration: 34, // secondes, entre 30 et 40 comme demandé
     riverLength: 150,
@@ -39,7 +43,6 @@
 
   const PARAMS = new URLSearchParams(window.location.search);
   const TEST_MODE = PARAMS.get("bdayTest") === "1";
-  const COUNTDOWN_TEST_SECONDS = Number(PARAMS.get("bdayCountdown") || 0);
   const FORCE_PHASE = PARAMS.get("bdayPhase"); // "river" | "snow"
 
   const PHASE = {
@@ -284,9 +287,6 @@
     hideBaseUi(true);
     let target = CONFIG.getTargetDate().getTime();
     if (TEST_MODE) target = Date.now() + 8000;
-    if (Number.isFinite(COUNTDOWN_TEST_SECONDS) && COUNTDOWN_TEST_SECONDS > 0) {
-      target = Date.now() + COUNTDOWN_TEST_SECONDS * 1000;
-    }
 
     const tick = () => {
       const remaining = target - Date.now();
