@@ -137,6 +137,9 @@ try {
     setupControls();
     setupMessageUi();
     setOverviewCamera();
+    if (window.BirthdayEvent) {
+      window.BirthdayEvent.init({ THREE: THREE_NS, scene, camera, renderer, isMobile });
+    }
     animate();
     setStatus("Valley rendered. Click to enter first-person mode.");
   }
@@ -1382,6 +1385,10 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = Math.min(clock.getDelta(), 0.033);
   const elapsed = clock.getElapsedTime();
+  if (window.BirthdayEvent && window.BirthdayEvent.isActive()) {
+    window.BirthdayEvent.update(delta, elapsed);
+    return;
+  }
   updateBoat(delta, elapsed);
   updatePlayer(delta);
   updateTargeting();
