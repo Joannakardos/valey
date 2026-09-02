@@ -789,17 +789,22 @@
     ground.rotation.x = -Math.PI / 2;
     group.add(ground);
 
-    // Sapins enneigés
+    // Sapins enneigés (en évitant le canal gelé)
     for (let i = 0; i < 70; i += 1) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 10 + Math.random() * 85;
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
+      if (x > -7 && x < 1 && z < 3 && z > -44) continue;
       group.add(buildSnowyPine(x, z, 1 + Math.random() * 1.4));
     }
 
     // Chaîne de montagnes enneigées tout autour de l'horizon
     buildMountainRange(group);
+
+    // Canal gelé bordé de lanternes et traversé par un petit pont en bois,
+    // pour retrouver l'ambiance chaude et réfléchissante du jardin de référence.
+    buildLanternCanal(group);
 
     // Un petit chalet en rondins, fumée qui monte de la cheminée
     S.snow.chimneySmoke = [];
@@ -837,7 +842,7 @@
     moon.position.set(-30, 40, -50);
     group.add(moon);
     group.add(new THREE.PointLight(0xdfe8ff, 0.6, 200));
-    group.add(new THREE.AmbientLight(0x3a4a82, 0.7));
+    group.add(new THREE.AmbientLight(0x4a4a72, 0.72));
     const moonLight = new THREE.DirectionalLight(0xcdd8ff, 0.5);
     moonLight.position.copy(moon.position);
     group.add(moonLight);
@@ -922,6 +927,132 @@
       cap.rotation.y = peak.rotation.y;
       group.add(cap);
     }
+  }
+
+  // ------------------------------------------------------------
+  // Canal gelé bordé de lanternes en bois avec un petit pont —
+  // l'ambiance chaude et réfléchissante du jardin de référence,
+  // transposée dans la clairière enneigée.
+  // ------------------------------------------------------------
+  function buildLanternCanal(group) {
+    const { THREE } = S.ctx;
+    const canalX = -3;
+    const canalLength = 42;
+    const canalZStart = 1;
+
+    // Glace sombre et brillante, légèrement réfléchissante
+    const iceMat = new THREE.MeshStandardMaterial({
+      color: 0x16233f, roughness: 0.12, metalness: 0.55, transparent: true, opacity: 0.92
+    });
+    const ice = new THREE.Mesh(new THREE.PlaneGeometry(6.4, canalLength), iceMat);
+    ice.rotation.x = -Math.PI / 2;
+    ice.position.set(canalX, 0.04, canalZStart - canalLength / 2);
+    group.add(ice);
+
+    // Reflets scintillants façon lumières de lanternes sur la glace
+    const glintGeo = new THREE.BufferGeometry();
+    const glintCount = 160;
+    const glintPos = new Float32Array(glintCount * 3);
+    for (let i = 0; i < glintCount; i += 1) {
+      glintPos[i * 3] = canalX + (Math.random() - 0.5) * 5.6;
+      glintPos[i * 3 + 1] = 0.08;
+      glintPos[i * 3 + 2] = canalZStart - Math.random() * canalLength;
+    }
+    glintGeo.setAttribute("position", new THREE.BufferAttribute(glintPos, 3));
+    const glints = new THREE.Points(glintGeo, new THREE.PointsMaterial({
+      color: 0xffcf8a, size: 0.1, transparent: true, opacity: 0.75, depthWrite: false
+    }));
+    group.add(glints);
+    S.snow.canalGlints = glints;
+
+    // Petit pont en bois qui traverse le canal
+    group.add(buildWoodenBridge(canalX, -13, Math.PI / 2));
+
+    // Lanternes sur pied, alternées le long des deux rives, comme sur la photo
+    S.snow.lanternPosts = [];
+    const postCount = 9;
+    for (let i = 0; i < postCount; i += 1) {
+      const z = canalZStart - 2 - i * (canalLength / postCount);
+      const side = i % 2 === 0 ? -1 : 1;
+      const post = buildLanternPost(canalX + side * 3.6, z, i % 3 === 0);
+      group.add(post);
+      S.snow.lanternPosts.push(post);
+    }
+  }
+
+  function buildLanternPost(x, z, withLight) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const wood = new THREE.MeshLambertMaterial({ color: 0x5a3a22 });
+
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 1.7, 6), wood);
+    post.position.y = 0.85;
+    group.add(post);
+
+    const armGeo = new THREE.BoxGeometry(0.6, 0.08, 0.08);
+    const arm = new THREE.Mesh(armGeo, wood);
+    arm.position.set(0.28, 1.65, 0);
+    group.add(arm);
+
+    const lantern = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.42, 0.34),
+      new THREE.MeshLambertMaterial({ color: 0xffcf8a, emissive: 0xff9a3d, emissiveIntensity: 0.95 })
+    );
+    lantern.position.set(0.5, 1.42, 0);
+    group.add(lantern);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.42), wood);
+    cap.position.set(0.5, 1.64, 0);
+    group.add(cap);
+
+    // Petite congère de neige au pied du poteau
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf3f8ff });
+    const drift = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 5), snowMat);
+    drift.scale.set(1, 0.25, 1);
+    group.add(drift);
+
+    if (withLight) {
+      const light = new THREE.PointLight(0xffb35c, 0.7, 8);
+      light.position.set(0.5, 1.42, 0);
+      group.add(light);
+    }
+
+    group.position.set(x, 0, z);
+    return group;
+  }
+
+  function buildWoodenBridge(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const wood = new THREE.MeshLambertMaterial({ color: 0x6b4527 });
+    const darkWood = new THREE.MeshLambertMaterial({ color: 0x4a2f1a });
+
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.14, 7.2), wood);
+    deck.position.y = 0.48;
+    group.add(deck);
+
+    [-1, 1].forEach((side) => {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 7.2), darkWood);
+      rail.position.set(side * 0.95, 0.78, 0);
+      group.add(rail);
+      for (let i = -3; i <= 3; i += 1) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.55, 0.12), darkWood);
+        post.position.set(side * 0.95, 0.78, i * 1.0);
+        group.add(post);
+      }
+    });
+
+    // Piliers dans la glace
+    [-2.6, 2.6].forEach((pz) => {
+      [-0.8, 0.8].forEach((px) => {
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.9, 6), darkWood);
+        pillar.position.set(px, 0.05, pz);
+        group.add(pillar);
+      });
+    });
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
   }
 
   // ------------------------------------------------------------
@@ -1358,6 +1489,9 @@
         pos.setY(i, y);
       }
       pos.needsUpdate = true;
+    }
+    if (S.snow.canalGlints) {
+      S.snow.canalGlints.material.opacity = 0.55 + Math.sin(elapsed * 2.6) * 0.2;
     }
     if (S.snow.chimneySmoke) {
       S.snow.chimneySmoke.forEach((puff, i) => {
