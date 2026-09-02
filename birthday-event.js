@@ -86,15 +86,6 @@
     const style = document.createElement("style");
     style.textContent = `
       #bdayRoot { position: fixed; inset: 0; z-index: 90; pointer-events: none; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-      #bdayCountdown { position: fixed; inset: 0; display: none; place-items: center; flex-direction: column;
-        background: radial-gradient(circle at center, rgba(20,14,40,0.9), rgba(3,3,10,0.98));
-        color: #f5f1dd; pointer-events: auto; z-index: 95; text-align: center; }
-      #bdayCountdown.open { display: grid; }
-      #bdayCountdown h2 { font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase; font-size: 0.85rem;
-        color: rgba(245,241,221,0.6); margin: 0 0 14px; }
-      #bdayClock { font-size: clamp(2.6rem, 9vw, 5.2rem); letter-spacing: 0.08em; color: #ffd28a;
-        text-shadow: 0 0 22px rgba(255,190,106,0.55), 0 0 60px rgba(255,190,106,0.25); }
-      #bdaySub { margin-top: 10px; font-size: 0.8rem; color: rgba(245,241,221,0.45); }
       #bdayFadeBlack, #bdayFadeWhite { position: fixed; inset: 0; opacity: 0; pointer-events: none;
         transition: opacity 1.1s ease; z-index: 92; }
       #bdayFadeBlack { background: #000; }
@@ -122,11 +113,6 @@
     const root = document.createElement("div");
     root.id = "bdayRoot";
     root.innerHTML = `
-      <div id="bdayCountdown">
-        <h2>Un moment vous attend</h2>
-        <div id="bdayClock">--:--</div>
-        <div id="bdaySub">rendez-vous à minuit</div>
-      </div>
       <div id="bdayEyelidTop"></div>
       <div id="bdayEyelidBottom"></div>
       <div id="bdayFadeBlack"></div>
@@ -137,8 +123,6 @@
     document.body.appendChild(root);
     S.dom = {
       root,
-      countdown: root.querySelector("#bdayCountdown"),
-      clock: root.querySelector("#bdayClock"),
       eyelidTop: root.querySelector("#bdayEyelidTop"),
       eyelidBottom: root.querySelector("#bdayEyelidBottom"),
       fadeBlack: root.querySelector("#bdayFadeBlack"),
@@ -283,23 +267,131 @@
 
   function startCountdown() {
     S.phase = PHASE.COUNTDOWN;
-    S.dom.countdown.classList.add("open");
-    hideBaseUi(true);
+    // Le compte à rebours n'est plus un écran qui bloque le jeu : c'est un texte
+    // géant et lumineux posé dans le ciel de la vallée, comme le "I LOVE YOU" déjà
+    // présent près de la lune. On peut continuer à se balader pendant qu'il tourne.
+    buildSkyCountdown();
     let target = CONFIG.getTargetDate().getTime();
     if (TEST_MODE) target = Date.now() + 8000;
 
     const tick = () => {
       const remaining = target - Date.now();
-      S.dom.clock.textContent = formatCountdown(remaining);
+      updateSkyCountdownText(formatCountdown(remaining));
       if (remaining <= 0) {
         clearInterval(intervalId);
-        S.dom.countdown.classList.remove("open");
+        removeSkyCountdown();
+        hideBaseUi(true);
         beginSequence();
       }
     };
     tick();
-    const intervalId = setInterval(tick, 250);
+    const intervalId = setInterval(tick, 1000);
     S.timers.push(intervalId);
+  }
+
+  // ------------------------------------------------------------
+  // Compte à rebours céleste : gros sprite lumineux + petites étoiles
+  // scintillantes autour, dans le style "I LOVE YOU" déjà présent dans
+  // la vallée mais en beaucoup plus grand.
+  // ------------------------------------------------------------
+  function buildSkyCountdown() {
+    const { THREE, scene } = S.ctx;
+    const group = new THREE.Group();
+    group.name = "bdaySkyCountdown";
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 1600;
+    canvas.height = 620;
+    const ctx2d = canvas.getContext("2d");
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.magFilter = THREE.LinearFilter;
+    texture.minFilter = THREE.LinearFilter;
+
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(52, 20, 1);
+    sprite.position.set(0, 34, -58);
+    sprite.renderOrder = 999;
+    group.add(sprite);
+
+    // Petit halo d'étoiles scintillantes autour du chiffre, purement décoratif.
+    const starGeo = new THREE.BufferGeometry();
+    const starCount = 90;
+    const starPos = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 26 + Math.random() * 20;
+      starPos[i * 3] = Math.cos(angle) * radius;
+      starPos[i * 3 + 1] = 34 + Math.sin(angle) * 9 + (Math.random() - 0.5) * 6;
+      starPos[i * 3 + 2] = -58 + (Math.random() - 0.5) * 14;
+    }
+    starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
+    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
+      color: 0xffe3ad, size: 0.5, transparent: true, opacity: 0.85, depthWrite: false
+    }));
+    stars.renderOrder = 998;
+    group.add(stars);
+
+    scene.add(group);
+    S.sky = {
+      group, sprite, stars, canvas, ctx: ctx2d, texture,
+      startedAt: now(), raf: null, lastText: null
+    };
+    updateSkyCountdownText("--:--");
+    tickSkyCountdown();
+  }
+
+  function updateSkyCountdownText(text) {
+    if (!S.sky || S.sky.lastText === text) return;
+    S.sky.lastText = text;
+    const { canvas, ctx: c, texture } = S.sky;
+    c.clearRect(0, 0, canvas.width, canvas.height);
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+
+    c.font = "600 44px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    c.fillStyle = "rgba(255, 241, 221, 0.62)";
+    c.shadowBlur = 0;
+    c.fillText("U N   M O M E N T   V O U S   A T T E N D", canvas.width / 2, 92);
+
+    const size = text.length > 6 ? 190 : 300;
+    c.font = `800 ${size}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    c.shadowColor = "rgba(255, 190, 106, 0.95)";
+    c.shadowBlur = 55;
+    c.fillStyle = "#ffdda0";
+    c.fillText(text, canvas.width / 2, canvas.height / 2 + 55);
+    c.shadowBlur = 30;
+    c.fillText(text, canvas.width / 2, canvas.height / 2 + 55);
+    c.shadowBlur = 0;
+
+    texture.needsUpdate = true;
+  }
+
+  function tickSkyCountdown() {
+    if (!S.sky) return;
+    const elapsed = now() - S.sky.startedAt;
+    const pulse = 1 + Math.sin(elapsed * 1.1) * 0.025;
+    S.sky.sprite.scale.set(52 * pulse, 20 * pulse, 1);
+    S.sky.sprite.position.y = 34 + Math.sin(elapsed * 0.6) * 0.8;
+    const starPos = S.sky.stars.geometry.attributes.position;
+    for (let i = 0; i < starPos.count; i += 1) {
+      const mat = S.sky.stars.material;
+      mat.opacity = 0.55 + Math.sin(elapsed * 2 + i) * 0.3 * 0.5 + 0.25;
+    }
+    S.sky.raf = requestAnimationFrame(tickSkyCountdown);
+  }
+
+  function removeSkyCountdown() {
+    if (!S.sky) return;
+    if (S.sky.raf) cancelAnimationFrame(S.sky.raf);
+    S.ctx.scene.remove(S.sky.group);
+    S.sky = null;
   }
 
   // ============================================================
@@ -356,6 +448,7 @@
   function skipToPhaseForTesting() {
     if (!FORCE_PHASE) return false;
     S.active = true;
+    hideBaseUi(true);
     hideOriginalValley();
     if (FORCE_PHASE === "river") {
       buildRiverScene();
@@ -464,10 +557,71 @@
       S.river.mist.push(puff);
     }
 
-    // Barque
+    // Petites lanternes chaudes suspendues le long des berges, façon guirlande
+    S.river.lanterns = [];
+    const lanternCount = Math.floor(CONFIG.riverLength / 4.5);
+    for (let i = 0; i < lanternCount; i += 1) {
+      const z = 5 - i * 4.5 + (Math.random() - 0.5) * 1.2;
+      [-1, 1].forEach((side) => {
+        const x = side * (CONFIG.riverWidth / 2 + 0.9);
+        const lantern = buildHangingLantern();
+        lantern.position.set(x, 2.1 + Math.sin(i * 1.7) * 0.3, z);
+        lantern.userData.bobPhase = Math.random() * Math.PI * 2;
+        group.add(lantern);
+        S.river.lanterns.push(lantern);
+      });
+    }
+    // Une seule vraie lumière ponctuelle tous les 3 lanternes pour rester léger
+    S.river.lanterns.forEach((lantern, i) => {
+      if (i % 3 !== 0) return;
+      const light = new THREE.PointLight(0xffb35c, 0.55, 6);
+      light.position.set(0, 0, 0);
+      lantern.add(light);
+    });
+
+    // Reflets scintillants à la surface de l'eau
+    const sparkGeo = new THREE.BufferGeometry();
+    const sparkCount = 140;
+    const sparkPos = new Float32Array(sparkCount * 3);
+    for (let i = 0; i < sparkCount; i += 1) {
+      sparkPos[i * 3] = (Math.random() - 0.5) * (CONFIG.riverWidth - 0.6);
+      sparkPos[i * 3 + 1] = 0.05;
+      sparkPos[i * 3 + 2] = 5 - Math.random() * CONFIG.riverLength;
+    }
+    sparkGeo.setAttribute("position", new THREE.BufferAttribute(sparkPos, 3));
+    const sparkles = new THREE.Points(sparkGeo, new THREE.PointsMaterial({
+      color: 0xffdca3, size: 0.09, transparent: true, opacity: 0.75, depthWrite: false
+    }));
+    group.add(sparkles);
+    S.river.sparkles = sparkles;
+
+    // Barque avec sa propre petite lanterne à la proue
     S.boat = buildBoat();
     group.add(S.boat.group);
     S.boat.group.position.set(0, 0, 5);
+  }
+
+  function buildHangingLantern() {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const cord = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.015, 0.015, 0.7, 4),
+      new THREE.MeshBasicMaterial({ color: 0x2a2015 })
+    );
+    cord.position.y = 0.35;
+    group.add(cord);
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.4, 0.32),
+      new THREE.MeshLambertMaterial({ color: 0xffcf8a, emissive: 0xff9a3d, emissiveIntensity: 0.85 })
+    );
+    group.add(body);
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 0.08, 0.4),
+      new THREE.MeshLambertMaterial({ color: 0x4a3320 })
+    );
+    cap.position.y = 0.24;
+    group.add(cap);
+    return group;
   }
 
   function buildWillow(x, z) {
@@ -546,6 +700,17 @@
       group.add(seat);
     }
 
+    // Petite lanterne à la proue pour éclairer chaudement le trajet
+    const prowLantern = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 0.24, 0.2),
+      new THREE.MeshLambertMaterial({ color: 0xffcf8a, emissive: 0xff9a3d, emissiveIntensity: 1 })
+    );
+    prowLantern.position.set(0.45, 0.5, -1.55);
+    group.add(prowLantern);
+    const prowLight = new THREE.PointLight(0xffb35c, 0.7, 5);
+    prowLight.position.copy(prowLantern.position);
+    group.add(prowLight);
+
     return { group, bobPhase: Math.random() * Math.PI * 2 };
   }
 
@@ -561,15 +726,6 @@
   // ============================================================
   // 9. SCÈNE HIVER — clairière enneigée, aurore boréale
   // ============================================================
-  const AURORA_VERTEX = `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      vec3 pos = position;
-      pos.z += sin(pos.x * 0.35 + position.y * 0.1) * 1.2;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-    }
-  `;
   const AURORA_FRAGMENT = `
     varying vec2 vUv;
     uniform float uTime;
@@ -589,15 +745,22 @@
     void main() {
       vec2 uv = vUv;
       float t = uTime * 0.05;
-      float n = fbm(vec2(uv.x * 2.6 + t, uv.y * 1.8 - t * 0.4));
-      float band = smoothstep(0.15, 0.85, n) * smoothstep(1.0, 0.15, uv.y) * smoothstep(0.0, 0.2, uv.y);
-      vec3 green = vec3(0.16, 0.92, 0.55);
-      vec3 purple = vec3(0.42, 0.28, 0.88);
-      vec3 teal = vec3(0.12, 0.58, 0.86);
-      vec3 col = mix(green, purple, smoothstep(0.25, 0.85, uv.x + n * 0.3));
-      col = mix(col, teal, n * 0.45);
-      float alpha = band * (0.5 + 0.22 * sin(uTime * 0.35 + uv.x * 6.0));
+      float n = fbm(vec2(uv.x * 5.2 + t, uv.y * 2.4 - t * 0.4));
+      float band = smoothstep(0.12, 0.8, n) * smoothstep(1.0, 0.1, uv.y) * smoothstep(0.0, 0.15, uv.y);
+      vec3 green = vec3(0.18, 0.95, 0.58);
+      vec3 purple = vec3(0.46, 0.3, 0.92);
+      vec3 teal = vec3(0.14, 0.62, 0.9);
+      vec3 col = mix(green, purple, smoothstep(0.2, 0.85, fract(uv.x * 2.0) + n * 0.3));
+      col = mix(col, teal, n * 0.5);
+      float alpha = band * (0.62 + 0.28 * sin(uTime * 0.35 + uv.x * 10.0));
       gl_FragColor = vec4(col, alpha);
+    }
+  `;
+  const DOME_VERTEX = `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `;
 
@@ -609,10 +772,10 @@
     S.snow.group = group;
 
     scene.background = new THREE.Color(0x0a1330);
-    scene.fog = new THREE.FogExp2(0x0e1c3a, 0.018);
+    scene.fog = new THREE.FogExp2(0x0e1c3a, 0.014);
 
     // Sol enneigé, légèrement vallonné
-    const groundGeo = new THREE.PlaneGeometry(220, 220, 60, 60);
+    const groundGeo = new THREE.PlaneGeometry(260, 260, 70, 70);
     const posAttr = groundGeo.attributes.position;
     for (let i = 0; i < posAttr.count; i += 1) {
       const x = posAttr.getX(i);
@@ -621,19 +784,50 @@
       posAttr.setZ(i, h);
     }
     groundGeo.computeVertexNormals();
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0xe9f2ff, roughness: 0.85, metalness: 0.0 });
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0xeaf3ff, roughness: 0.85, metalness: 0.0 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     group.add(ground);
 
     // Sapins enneigés
-    for (let i = 0; i < 60; i += 1) {
+    for (let i = 0; i < 70; i += 1) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = 8 + Math.random() * 70;
+      const dist = 10 + Math.random() * 85;
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
       group.add(buildSnowyPine(x, z, 1 + Math.random() * 1.4));
     }
+
+    // Chaîne de montagnes enneigées tout autour de l'horizon
+    buildMountainRange(group);
+
+    // Un petit chalet en rondins, fumée qui monte de la cheminée
+    S.snow.chimneySmoke = [];
+    const chalet = buildChalet(-16, -24, 0.35);
+    group.add(chalet);
+
+    // Attelage de huskies + traîneau, prêts à partir dans la neige
+    S.snow.huskies = [];
+    const huskyColors = [0xf3f2ee, 0xdcd5c8, 0x8f8f96];
+    for (let i = 0; i < 3; i += 1) {
+      const husky = buildHusky(9 - i * 0.3, -13 - i * 1.9, Math.PI * 0.08, huskyColors[i % huskyColors.length]);
+      husky.userData.phase = i * 1.4;
+      group.add(husky);
+      S.snow.huskies.push(husky);
+    }
+    group.add(buildSled(10.4, -10.4, Math.PI * 0.08));
+
+    // Petits rennes qui broutent la neige, dispersés dans la clairière
+    S.snow.reindeer = [];
+    const deerSpots = [
+      [-24, -10], [17, -27], [-7, -33], [23, -5], [-30, -30]
+    ];
+    deerSpots.forEach(([x, z], i) => {
+      const deer = buildReindeer(x, z, Math.random() * Math.PI * 2);
+      deer.userData.phase = i * 1.1;
+      group.add(deer);
+      S.snow.reindeer.push(deer);
+    });
 
     // Lumière : lune froide + halo d'aurore
     const moon = new THREE.Mesh(
@@ -643,17 +837,17 @@
     moon.position.set(-30, 40, -50);
     group.add(moon);
     group.add(new THREE.PointLight(0xdfe8ff, 0.6, 200));
-    group.add(new THREE.AmbientLight(0x33447a, 0.65));
+    group.add(new THREE.AmbientLight(0x3a4a82, 0.7));
     const moonLight = new THREE.DirectionalLight(0xcdd8ff, 0.5);
     moonLight.position.copy(moon.position);
     group.add(moonLight);
 
     // Étoiles
     const starGeo = new THREE.BufferGeometry();
-    const starCount = 500;
+    const starCount = 600;
     const starPos = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount; i += 1) {
-      const r = 140 + Math.random() * 40;
+      const r = 150 + Math.random() * 50;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI * 0.5;
       starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
@@ -664,44 +858,304 @@
     const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, transparent: true, opacity: 0.85 }));
     group.add(stars);
 
-    // Aurore boréale : plusieurs rubans à différentes profondeurs/couleurs
+    // Aurore boréale : un vrai dôme à 360° qui enveloppe tout le ciel,
+    // vu de l'intérieur, pour qu'elle occupe tout l'écran où qu'on regarde.
     S.snow.auroraMaterials = [];
-    for (let i = 0; i < 3; i += 1) {
-      const geo = new THREE.PlaneGeometry(160, 46, 40, 20);
-      const mat = new THREE.ShaderMaterial({
-        vertexShader: AURORA_VERTEX,
-        fragmentShader: AURORA_FRAGMENT,
-        uniforms: { uTime: { value: i * 10 } },
-        transparent: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending
-      });
-      const ribbon = new THREE.Mesh(geo, mat);
-      ribbon.position.set(0, 32 + i * 6, -70 - i * 12);
-      ribbon.rotation.x = -0.15;
-      group.add(ribbon);
-      S.snow.auroraMaterials.push(mat);
-    }
+    const domeGeo = new THREE.CylinderGeometry(105, 105, 95, 64, 1, true);
+    const domeMat = new THREE.ShaderMaterial({
+      vertexShader: DOME_VERTEX,
+      fragmentShader: AURORA_FRAGMENT,
+      uniforms: { uTime: { value: 0 } },
+      transparent: true,
+      depthWrite: false,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending
+    });
+    const dome = new THREE.Mesh(domeGeo, domeMat);
+    dome.position.set(0, 52, 0);
+    group.add(dome);
+    S.snow.auroraMaterials.push(domeMat);
 
-    // Neige qui tombe
+    // Neige qui tombe, plus dense pour l'ambiance "cliché de Noël"
     const flakeGeo = new THREE.BufferGeometry();
-    const flakeCount = 900;
+    const flakeCount = 1400;
     const flakePos = new Float32Array(flakeCount * 3);
     for (let i = 0; i < flakeCount; i += 1) {
-      flakePos[i * 3] = (Math.random() - 0.5) * 80;
-      flakePos[i * 3 + 1] = Math.random() * 30;
-      flakePos[i * 3 + 2] = (Math.random() - 0.5) * 80;
+      flakePos[i * 3] = (Math.random() - 0.5) * 90;
+      flakePos[i * 3 + 1] = Math.random() * 32;
+      flakePos[i * 3 + 2] = (Math.random() - 0.5) * 90;
     }
     flakeGeo.setAttribute("position", new THREE.BufferAttribute(flakePos, 3));
-    const flakes = new THREE.Points(flakeGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.12, transparent: true, opacity: 0.9 }));
+    const flakes = new THREE.Points(flakeGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.13, transparent: true, opacity: 0.9 }));
     group.add(flakes);
     S.snow.snowflakes = flakes;
 
-    // Caméra posée dans la clairière
+    // Caméra posée dans la clairière, face au chalet et à l'attelage
     S.ctx.camera.position.set(0, 1.7, 6);
-    S.look.yaw = 0;
-    S.look.pitch = 0.12;
+    S.look.yaw = -0.35;
+    S.look.pitch = 0.1;
+  }
+
+  // ------------------------------------------------------------
+  // Montagnes enneigées à l'horizon, tout autour de la clairière
+  // ------------------------------------------------------------
+  function buildMountainRange(group) {
+    const { THREE } = S.ctx;
+    const rockMat = new THREE.MeshLambertMaterial({ color: 0x3c4666 });
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf5f9ff });
+    const count = 30;
+    for (let i = 0; i < count; i += 1) {
+      const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.12;
+      const radius = 118 + Math.random() * 30;
+      const height = 22 + Math.random() * 26;
+      const base = 10 + Math.random() * 8;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+
+      const peak = new THREE.Mesh(new THREE.ConeGeometry(base, height, 6), rockMat);
+      peak.position.set(x, height / 2 - 2, z);
+      peak.rotation.y = Math.random() * Math.PI;
+      group.add(peak);
+
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(base * 0.55, height * 0.4, 6), snowMat);
+      cap.position.set(x, height * 0.8 - 2, z);
+      cap.rotation.y = peak.rotation.y;
+      group.add(cap);
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Petit chalet en rondins avec fenêtre qui brille et cheminée qui fume
+  // ------------------------------------------------------------
+  function buildChalet(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const logMat = new THREE.MeshLambertMaterial({ color: 0x6b4527 });
+    const roofMat = new THREE.MeshLambertMaterial({ color: 0x8a2f2f });
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf3f8ff });
+    const doorMat = new THREE.MeshLambertMaterial({ color: 0x3a2314 });
+
+    const walls = new THREE.Mesh(new THREE.BoxGeometry(6, 3.4, 5.4), logMat);
+    walls.position.y = 1.7;
+    group.add(walls);
+
+    // Toit à deux pans
+    const roofL = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.25, 3.6), roofMat);
+    roofL.position.set(0, 3.6, -1.55);
+    roofL.rotation.x = -0.5;
+    group.add(roofL);
+    const roofR = roofL.clone();
+    roofR.position.z = 1.55;
+    roofR.rotation.x = 0.5;
+    group.add(roofR);
+    const snowL = new THREE.Mesh(new THREE.BoxGeometry(6.7, 0.14, 1.4), snowMat);
+    snowL.position.set(0, 4.15, -2.55);
+    snowL.rotation.x = -0.5;
+    group.add(snowL);
+    const snowR = snowL.clone();
+    snowR.position.z = 2.55;
+    snowR.rotation.x = 0.5;
+    group.add(snowR);
+
+    // Cheminée
+    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.4, 0.55), new THREE.MeshLambertMaterial({ color: 0x4a4a52 }));
+    chimney.position.set(1.6, 4.6, 0.2);
+    group.add(chimney);
+
+    // Porte
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.9, 0.1), doorMat);
+    door.position.set(-1.6, 0.95, 2.71);
+    group.add(door);
+
+    // Fenêtre chaude et lumineuse
+    const window1 = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ color: 0xffd48a })
+    );
+    window1.position.set(1.2, 2, 2.71);
+    group.add(window1);
+    const windowFrame = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.15, 0.08), new THREE.MeshLambertMaterial({ color: 0x2f1c10 }));
+    windowFrame.position.set(1.2, 2, 2.68);
+    group.add(windowFrame);
+    const windowLight = new THREE.PointLight(0xffc772, 0.9, 12);
+    windowLight.position.set(1.2, 2, 3.4);
+    group.add(windowLight);
+
+    // Congère de neige au pied des murs
+    const snowdrift = new THREE.Mesh(new THREE.SphereGeometry(3.4, 10, 6), snowMat);
+    snowdrift.scale.set(1.35, 0.22, 1.2);
+    snowdrift.position.y = 0.05;
+    group.add(snowdrift);
+
+    // Petit sapin décoré à côté de la porte
+    group.add(buildSnowyPine(-2.6, 3.3, 0.7));
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+
+    // Points de départ pour la fumée de la cheminée (en coordonnées monde)
+    const smokeOrigin = new THREE.Vector3(1.6, 5.4, 0.2).applyEuler(new THREE.Euler(0, rotY || 0, 0)).add(new THREE.Vector3(x, 0, z));
+    for (let i = 0; i < 8; i += 1) {
+      const puff = new THREE.Mesh(
+        new THREE.SphereGeometry(0.32, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xdfe4ea, transparent: true, opacity: 0.35 })
+      );
+      puff.position.copy(smokeOrigin);
+      puff.position.y += i * 0.35;
+      puff.userData.origin = smokeOrigin.clone();
+      puff.userData.riseOffset = i * 0.35;
+      S.snow.group.add(puff);
+      S.snow.chimneySmoke.push(puff);
+    }
+
+    return group;
+  }
+
+  // ------------------------------------------------------------
+  // Husky voxel, pelage clair/gris, prêt à tirer le traîneau
+  // ------------------------------------------------------------
+  function buildHusky(x, z, rotY, color) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const fur = new THREE.MeshLambertMaterial({ color });
+    const dark = new THREE.MeshLambertMaterial({ color: 0x2b2b30 });
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 1.05), fur);
+    body.position.y = 0.55;
+    group.add(body);
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.38, 0.38), fur);
+    head.position.set(0, 0.78, -0.68);
+    group.add(head);
+
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.2, 0.26), fur);
+    snout.position.set(0, 0.72, -0.9);
+    group.add(snout);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.05), dark);
+    nose.position.set(0, 0.7, -1.02);
+    group.add(nose);
+
+    [-1, 1].forEach((side) => {
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.22, 4), fur);
+      ear.position.set(side * 0.13, 1.0, -0.66);
+      group.add(ear);
+    });
+
+    const legGeo = new THREE.BoxGeometry(0.13, 0.5, 0.13);
+    [[-0.16, 0.4], [0.16, 0.4], [-0.16, -0.35], [0.16, -0.35]].forEach(([lx, lz]) => {
+      const leg = new THREE.Mesh(legGeo, dark);
+      leg.position.set(lx, 0.25, lz);
+      group.add(leg);
+    });
+
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.5), fur);
+    tail.position.set(0, 0.75, 0.68);
+    tail.rotation.x = 0.6;
+    group.add(tail);
+    group.userData.tail = tail;
+
+    // Harnais rouge, joli petit contraste dans la neige
+    const harness = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.06, 0.12), new THREE.MeshLambertMaterial({ color: 0xc23a3a }));
+    harness.position.set(0, 0.68, -0.2);
+    group.add(harness);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
+  }
+
+  // ------------------------------------------------------------
+  // Petit traîneau en bois avec ses patins
+  // ------------------------------------------------------------
+  function buildSled(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const wood = new THREE.MeshLambertMaterial({ color: 0x6b4527 });
+    const dark = new THREE.MeshLambertMaterial({ color: 0x3a2a18 });
+
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.12, 1.6), wood);
+    bed.position.y = 0.42;
+    group.add(bed);
+
+    [-1, 1].forEach((side) => {
+      const runner = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 1.9), dark);
+      runner.position.set(side * 0.34, 0.2, 0.05);
+      group.add(runner);
+      const curl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.3), dark);
+      curl.position.set(side * 0.34, 0.42, -0.98);
+      curl.rotation.x = -0.9;
+      group.add(curl);
+    });
+
+    for (let i = -1; i <= 1; i += 1) {
+      const slat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.12), wood);
+      slat.position.set(0, 0.5, i * 0.5);
+      group.add(slat);
+    }
+
+    // Petite lanterne à l'arrière pour le côté féerique
+    const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.2, 0.16), new THREE.MeshLambertMaterial({ color: 0xffcf8a, emissive: 0xff9a3d, emissiveIntensity: 0.9 }));
+    lantern.position.set(0, 0.72, 0.75);
+    group.add(lantern);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
+  }
+
+  // ------------------------------------------------------------
+  // Petit renne voxel, bois qui broute dans la clairière
+  // ------------------------------------------------------------
+  function buildReindeer(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const coat = new THREE.MeshLambertMaterial({ color: 0x7a5232 });
+    const belly = new THREE.MeshLambertMaterial({ color: 0xdcc7a8 });
+    const antlerMat = new THREE.MeshLambertMaterial({ color: 0x4a3626 });
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.6, 1.15), coat);
+    body.position.y = 0.75;
+    group.add(body);
+    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.4), belly);
+    chest.position.set(0, 0.55, -0.55);
+    group.add(chest);
+
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.5, 0.28), coat);
+    neck.position.set(0, 1.1, -0.62);
+    neck.rotation.x = -0.45;
+    group.add(neck);
+    group.userData.neck = neck;
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.28, 0.42), coat);
+    head.position.set(0, 1.42, -0.9);
+    group.add(head);
+
+    // Bois d'andouiller, quelques branches asymétriques façon Minecraft
+    [-1, 1].forEach((side) => {
+      const main = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 0.06), antlerMat);
+      main.position.set(side * 0.13, 1.78, -0.9);
+      main.rotation.z = side * 0.35;
+      group.add(main);
+      const branch = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.26, 0.05), antlerMat);
+      branch.position.set(side * 0.28, 1.94, -0.82);
+      branch.rotation.z = side * 1.1;
+      group.add(branch);
+    });
+
+    const legGeo = new THREE.BoxGeometry(0.14, 0.62, 0.14);
+    [[-0.18, 0.42], [0.18, 0.42], [-0.18, -0.38], [0.18, -0.38]].forEach(([lx, lz]) => {
+      const leg = new THREE.Mesh(legGeo, coat);
+      leg.position.set(lx, 0.31, lz);
+      group.add(leg);
+    });
+
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.12), belly);
+    tail.position.set(0, 0.85, 0.6);
+    group.add(tail);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
   }
 
   function buildSnowyPine(x, z, scale) {
@@ -847,6 +1301,15 @@
       m.position.y = 0.5 + Math.sin(elapsed * 1.2 + i) * 0.4;
       m.material.opacity = 0.12 + Math.sin(elapsed * 2 + i) * 0.05;
     });
+    if (S.river.lanterns) {
+      S.river.lanterns.forEach((l) => {
+        l.rotation.z = Math.sin(elapsed * 0.9 + l.userData.bobPhase) * 0.08;
+        l.position.y += Math.sin(elapsed * 1.4 + l.userData.bobPhase) * 0.0006;
+      });
+    }
+    if (S.river.sparkles) {
+      S.river.sparkles.material.opacity = 0.55 + Math.sin(elapsed * 3) * 0.2;
+    }
 
     const reachedEnd = S.boat.group.position.z <= -CONFIG.riverLength + 10;
     const timeUp = now() - S.phaseStartedAt >= CONFIG.riverDuration;
@@ -895,6 +1358,33 @@
         pos.setY(i, y);
       }
       pos.needsUpdate = true;
+    }
+    if (S.snow.chimneySmoke) {
+      S.snow.chimneySmoke.forEach((puff, i) => {
+        puff.position.y = puff.userData.origin.y + ((elapsed * 0.7 + puff.userData.riseOffset) % 2.8);
+        puff.position.x = puff.userData.origin.x + Math.sin(elapsed * 0.6 + i) * 0.15;
+        const riseFrac = ((elapsed * 0.7 + puff.userData.riseOffset) % 2.8) / 2.8;
+        puff.scale.setScalar(0.6 + riseFrac * 1.6);
+        puff.material.opacity = 0.4 * (1 - riseFrac);
+      });
+    }
+    if (S.snow.huskies) {
+      S.snow.huskies.forEach((husky) => {
+        const p = husky.userData.phase;
+        husky.position.y = Math.sin(elapsed * 2.1 + p) * 0.015;
+        if (husky.userData.tail) {
+          husky.userData.tail.rotation.y = Math.sin(elapsed * 3.4 + p) * 0.35;
+        }
+      });
+    }
+    if (S.snow.reindeer) {
+      S.snow.reindeer.forEach((deer) => {
+        const p = deer.userData.phase;
+        const graze = Math.sin(elapsed * 0.5 + p);
+        if (deer.userData.neck) {
+          deer.userData.neck.rotation.x = -0.45 + Math.max(0, graze) * 0.5;
+        }
+      });
     }
     if (S.snow.textSprite && now() - S.phaseStartedAt >= CONFIG.snowSceneMinDuration) {
       S.snow.textSprite.material.opacity = Math.min(1, S.snow.textSprite.material.opacity + delta * 0.3);
