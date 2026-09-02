@@ -1255,7 +1255,7 @@ function createSoftMusic() {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   if (!AudioContext) {
     setStatus("Audio is not supported in this browser.");
-    return { playing: false, start() {}, stop() {} };
+    return { playing: false, start() { }, stop() { } };
   }
 
   const context = new AudioContext();
@@ -1383,25 +1383,31 @@ function enterFirstPerson() {
 
 function animate() {
   requestAnimationFrame(animate);
+
   const delta = Math.min(clock.getDelta(), 0.033);
   const elapsed = clock.getElapsedTime();
+
+  // Événement anniversaire
   if (window.BirthdayEvent && window.BirthdayEvent.isActive()) {
     window.BirthdayEvent.update(delta, elapsed);
     return;
   }
+
+  // Logique normale du jeu
   updateBoat(delta, elapsed);
-  updatePlayer(delta);
+  updatePlayer();
   updateTargeting();
-  updateMoonGaze(delta);
+  updateMoonGaze();
   updateConstellation(delta, elapsed);
   updateVegetation(elapsed);
   updateFireflies(elapsed);
   updateKoiFish(elapsed);
   updateLanterns(elapsed);
+
   renderer.render(scene, camera);
 }
 
-function updatePlayer(delta) {
+function updatePlayer() {
   if (state.overview) {
     const time = clock.getElapsedTime();
     camera.position.x = Math.sin(time * 0.18) * 20;
@@ -1429,7 +1435,7 @@ function updatePlayer(delta) {
   const direction = new THREE_NS.Vector3(inputX, 0, inputZ);
   if (direction.lengthSq() > 0.001) {
     direction.normalize().applyEuler(yawOnly);
-    camera.position.addScaledVector(direction, delta * (isMobile ? 4.2 : 5.2));
+    camera.position.addScaledVector(direction,  * (isMobile ? 4.2 : 5.2));
   }
   const radius = Math.hypot(camera.position.x, camera.position.z);
   if (radius > WORLD.walkLimit) {
@@ -1450,10 +1456,10 @@ function getLakeDepthAt(x, z) {
   return 0.72 * t;
 }
 
-function updateBoat(delta, time) {
+function updateBoat(, time) {
   if (!state.boat) return;
   const boat = state.boat;
-  boat.angle += delta * boat.speed;
+  boat.angle +=  * boat.speed;
   const x = Math.cos(boat.angle) * boat.radius;
   const z = Math.sin(boat.angle) * boat.radius;
   boat.group.position.set(x, LAKE_Y + 0.26 + Math.sin(time * 1.25 + boat.bobPhase) * 0.045, z);
@@ -1521,7 +1527,7 @@ function updateTargeting() {
   setHighlightedLantern(findLanternInView());
 }
 
-function updateMoonGaze(delta) {
+function updateMoonGaze() {
   if (!state.moonLoveText || state.moonLoveRevealed || state.overview) return;
 
   const cameraDirection = new THREE_NS.Vector3();
@@ -1532,14 +1538,14 @@ function updateMoonGaze(delta) {
   const lookingAtMoon = cameraDirection.dot(moonDirection) > 0.992;
   if (!lookingAtMoon) return;
 
-  state.moonLookSeconds += delta;
+  state.moonLookSeconds += ;
   if (state.moonLookSeconds >= MOON_GAZE_SECONDS) {
     state.moonLoveRevealed = true;
     state.moonLoveText.visible = true;
   }
 }
 
-function updateConstellation(delta, time) {
+function updateConstellation(, time) {
   if (!state.constellationGroup || state.overview) return;
 
   const cameraDirection = new THREE_NS.Vector3();
@@ -1547,7 +1553,7 @@ function updateConstellation(delta, time) {
   const lookingHigh = cameraDirection.y > 0.52;
 
   if (!state.constellationRevealed && lookingHigh) {
-    state.constellationLookSeconds += delta;
+    state.constellationLookSeconds += ;
     if (state.constellationLookSeconds >= CONSTELLATION_GAZE_SECONDS) {
       state.constellationRevealed = true;
       state.constellationGroup.visible = true;

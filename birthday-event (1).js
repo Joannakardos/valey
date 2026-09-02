@@ -1716,15 +1716,15 @@
     }
   }
 
-  function update(delta, elapsed) {
+  function update(, elapsed) {
     if (!S.active) return;
     switch (S.phase) {
       case PHASE.RIVER_RIDE:
-        updateRiverRide(delta, elapsed);
+        updateRiverRide(, elapsed);
         break;
       case PHASE.SNOW_SCENE:
       case PHASE.FINALE:
-        updateSnowScene(delta, elapsed);
+        updateSnowScene(, elapsed);
         break;
       default:
         break;
