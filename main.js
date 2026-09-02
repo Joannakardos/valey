@@ -1437,7 +1437,8 @@ function updatePlayer() {
   const direction = new THREE_NS.Vector3(inputX, 0, inputZ);
   if (direction.lengthSq() > 0.001) {
     direction.normalize().applyEuler(yawOnly);
-    camera.position.addScaledVector(direction,  * (isMobile ? 4.2 : 5.2));
+    camera.position.addScaledVector(direction, delta * (isMobile ? 4.2 : 5.2));
+
   }
   const radius = Math.hypot(camera.position.x, camera.position.z);
   if (radius > WORLD.walkLimit) {
