@@ -1458,10 +1458,10 @@ function getLakeDepthAt(x, z) {
   return 0.72 * t;
 }
 
-function updateBoat(, time) {
+function updateBoat(delta, time) {
   if (!state.boat) return;
   const boat = state.boat;
-  boat.angle +=  * boat.speed;
+  boat.angle += delta * boat.speed;
   const x = Math.cos(boat.angle) * boat.radius;
   const z = Math.sin(boat.angle) * boat.radius;
   boat.group.position.set(x, LAKE_Y + 0.26 + Math.sin(time * 1.25 + boat.bobPhase) * 0.045, z);
@@ -1540,14 +1540,14 @@ function updateMoonGaze() {
   const lookingAtMoon = cameraDirection.dot(moonDirection) > 0.992;
   if (!lookingAtMoon) return;
 
-  state.moonLookSeconds += ;
+  state.moonLookSeconds += delta;
   if (state.moonLookSeconds >= MOON_GAZE_SECONDS) {
     state.moonLoveRevealed = true;
     state.moonLoveText.visible = true;
   }
 }
 
-function updateConstellation(, time) {
+function updateConstellation(delta, time) {
   if (!state.constellationGroup || state.overview) return;
 
   const cameraDirection = new THREE_NS.Vector3();
@@ -1555,8 +1555,7 @@ function updateConstellation(, time) {
   const lookingHigh = cameraDirection.y > 0.52;
 
   if (!state.constellationRevealed && lookingHigh) {
-    state.constellationLookSeconds += ;
-    if (state.constellationLookSeconds >= CONSTELLATION_GAZE_SECONDS) {
+    state.constellationLookSeconds += delta; if (state.constellationLookSeconds >= CONSTELLATION_GAZE_SECONDS) {
       state.constellationRevealed = true;
       state.constellationGroup.visible = true;
     }
