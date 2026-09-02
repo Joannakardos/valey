@@ -477,8 +477,131 @@
   }
 
   // ============================================================
-  // 8. SCÈNE RIVIÈRE — barque, saules pleureurs fleuris, poissons
+  // 8. SCÈNE RIVIÈRE — barque, cerisiers pleureurs voxels, poissons
   // ============================================================
+
+  // ------------------------------------------------------------
+  // 8a. Textures pixel-art (même technique que main.js : canvas +
+  // NearestFilter) pour obtenir le rendu "bloc Minecraft" de la
+  // photo de référence, au lieu de sphères/cylindres lisses.
+  // ------------------------------------------------------------
+  const TEX_CACHE = {};
+
+  function pixelTexture(key, size, drawFn) {
+    if (TEX_CACHE[key]) return TEX_CACHE[key];
+    const { THREE } = S.ctx;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    drawFn(ctx, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    TEX_CACHE[key] = tex;
+    return tex;
+  }
+
+  // Damier rose façon feuillage de cerisier Minecraft, avec quelques
+  // pixels blancs qui scintillent comme des fleurs ouvertes.
+  function blossomTexture(variant) {
+    const palettes = [
+      ["#e8779f", "#f6a8c4"],
+      ["#f291b8", "#ffc3da"],
+      ["#d95f8c", "#ef8fb2"]
+    ];
+    const [dark, light] = palettes[variant % palettes.length];
+    return pixelTexture(`blossom${variant}`, 16, (ctx, size) => {
+      const cell = size / 8;
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          ctx.fillStyle = (x + y) % 2 === 0 ? dark : light;
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+      // pluie de petites fleurs blanches / bourgeons
+      const sparkles = [[1, 1], [5, 2], [3, 4], [6, 6], [1, 6], [4, 0]];
+      ctx.fillStyle = "#fff3f8";
+      sparkles.forEach(([x, y]) => ctx.fillRect(x * cell, y * cell, cell, cell));
+    });
+  }
+
+  function barkTexture() {
+    return pixelTexture("bark", 16, (ctx, size) => {
+      const cell = size / 8;
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          const n = (x * 3 + y * 7) % 5;
+          ctx.fillStyle = n < 2 ? "#4a3320" : n < 4 ? "#5a3f27" : "#3a2718";
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+  }
+
+  // Eau sombre et légèrement pixelisée (au lieu d'un dégradé lisse),
+  // qui accroche les reflets chauds des lanternes comme sur la photo.
+  function waterTexture() {
+    const { THREE } = S.ctx;
+    const tex = pixelTexture("water", 16, (ctx, size) => {
+      const cell = size / 8;
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          const n = (x * 5 + y * 3) % 4;
+          const shades = ["#03101f", "#04182a", "#051f33", "#02141f"];
+          ctx.fillStyle = shades[n];
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2, Math.max(6, Math.round(CONFIG.riverLength / 5)));
+    return tex;
+  }
+
+  function grassBankTexture() {
+    return pixelTexture("bank", 16, (ctx, size) => {
+      const cell = size / 8;
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          const n = (x * 7 + y * 5) % 6;
+          ctx.fillStyle = n < 3 ? "#1e5a24" : n < 5 ? "#256b2b" : "#173f1c";
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+  }
+
+  function lanternPaperTexture() {
+    return pixelTexture("lanternPaper", 16, (ctx, size) => {
+      ctx.fillStyle = "#fff2c8";
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = "#ffdd8f";
+      ctx.fillRect(2, 2, size - 4, size - 4);
+      ctx.fillStyle = "#fff8e2";
+      ctx.fillRect(5, 5, size - 10, size - 10);
+      ctx.fillStyle = "#c4a05a";
+      ctx.fillRect(0, 0, size, 1);
+      ctx.fillRect(0, size - 1, size, 1);
+      ctx.fillRect(0, 0, 1, size);
+      ctx.fillRect(size - 1, 0, 1, size);
+    });
+  }
+
+  function koiTexture(orange) {
+    return pixelTexture(orange ? "koiOrange" : "koiBlack", 16, (ctx, size) => {
+      ctx.clearRect(0, 0, size, size);
+      ctx.fillStyle = orange ? "#ff7a2e" : "#141210";
+      ctx.fillRect(2, 5, 11, 6);
+      ctx.fillRect(5, 3, 7, 10);
+      ctx.fillStyle = orange ? "#ffb27a" : "#3a3530";
+      ctx.fillRect(6, 5, 4, 3);
+      ctx.fillStyle = "#f2f2ea";
+      ctx.fillRect(9, 6, 2, 2);
+    });
+  }
+
   function buildRiverScene() {
     const { THREE, scene } = S.ctx;
     const group = new THREE.Group();
@@ -486,10 +609,11 @@
     scene.add(group);
     S.river.group = group;
 
-    // Eau : long ruban rectiligne, matière sombre et brillante avec léger flot animé
+    // Eau : long ruban rectiligne, texture pixel sombre + reflets chauds animés
     const waterGeo = new THREE.PlaneGeometry(CONFIG.riverWidth, CONFIG.riverLength, 1, 40);
     const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x0c2a4a, roughness: 0.22, metalness: 0.1, transparent: true, opacity: 0.92
+      map: waterTexture(), color: 0x3d6f8f, roughness: 0.18, metalness: 0.25,
+      transparent: true, opacity: 0.95, emissive: 0x0a1a2a, emissiveIntensity: 0.4
     });
     const water = new THREE.Mesh(waterGeo, waterMat);
     water.rotation.x = -Math.PI / 2;
@@ -497,9 +621,9 @@
     group.add(water);
     S.river.waterMesh = water;
 
-    // Berges basses
+    // Berges basses, texture d'herbe pixel façon bloc Minecraft
     const bankGeo = new THREE.BoxGeometry(1, 0.25, CONFIG.riverLength);
-    const bankMat = new THREE.MeshLambertMaterial({ color: 0x213a24 });
+    const bankMat = new THREE.MeshLambertMaterial({ map: grassBankTexture() });
     [-1, 1].forEach((side) => {
       const bank = new THREE.Mesh(bankGeo, bankMat);
       bank.position.set(side * (CONFIG.riverWidth / 2 + 0.5), 0.05, -CONFIG.riverLength / 2 + 4);
@@ -612,46 +736,95 @@
     group.add(cord);
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(0.32, 0.4, 0.32),
-      new THREE.MeshLambertMaterial({ color: 0xffcf8a, emissive: 0xff9a3d, emissiveIntensity: 0.85 })
+      new THREE.MeshLambertMaterial({
+        map: lanternPaperTexture(), emissive: 0xff9a3d, emissiveIntensity: 0.7
+      })
     );
     group.add(body);
     const cap = new THREE.Mesh(
       new THREE.BoxGeometry(0.4, 0.08, 0.4),
-      new THREE.MeshLambertMaterial({ color: 0x4a3320 })
+      new THREE.MeshLambertMaterial({ map: barkTexture() })
     );
     cap.position.y = 0.24;
     group.add(cap);
+    const base = cap.clone();
+    base.position.y = -0.22;
+    group.add(base);
     return group;
   }
 
+  // ------------------------------------------------------------
+  // Cerisier pleureur voxel : tronc en blocs + canopée faite d'un
+  // amas de cubes texturés (feuillage rose façon Minecraft), avec
+  // des chaînes de petits cubes qui pendent vers l'eau pour l'effet
+  // "pleureur". Remplace l'ancien saule en sphère lisse.
+  // ------------------------------------------------------------
   function buildWillow(x, z) {
     const { THREE } = S.ctx;
     const group = new THREE.Group();
-    const trunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.26, 2.6, 6),
-      new THREE.MeshLambertMaterial({ color: 0x4a3320 })
-    );
-    trunk.position.y = 1.3;
-    group.add(trunk);
+    const bark = new THREE.MeshLambertMaterial({ map: barkTexture() });
 
-    const canopy = new THREE.Mesh(
-      new THREE.SphereGeometry(1.5, 8, 6),
-      new THREE.MeshLambertMaterial({ color: 0x2f5d3a })
-    );
-    canopy.position.y = 3;
-    canopy.scale.set(1.2, 0.85, 1.2);
-    group.add(canopy);
+    // Tronc : 3 blocs empilés, légèrement décalés pour casser la rigidité
+    const trunkHeights = [0.9, 0.9, 0.8];
+    let trunkY = 0;
+    trunkHeights.forEach((h, i) => {
+      const seg = new THREE.Mesh(
+        new THREE.BoxGeometry(0.42 - i * 0.06, h, 0.42 - i * 0.06),
+        bark
+      );
+      seg.position.set((Math.random() - 0.5) * 0.06, trunkY + h / 2, (Math.random() - 0.5) * 0.06);
+      group.add(seg);
+      trunkY += h;
+    });
 
-    // Branches pleureuses fleuries : brins qui tombent vers l'eau
-    const strandMat = new THREE.MeshLambertMaterial({ color: 0xe9c7e0, emissive: 0x3a1f38, emissiveIntensity: 0.4 });
-    for (let i = 0; i < 10; i += 1) {
-      const angle = (i / 10) * Math.PI * 2;
-      const strand = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 2.4, 4), strandMat);
-      strand.position.set(Math.cos(angle) * 1.1, 2.1, Math.sin(angle) * 1.1);
-      strand.rotation.z = Math.cos(angle) * 0.15;
-      strand.rotation.x = Math.sin(angle) * 0.15;
-      strand.userData.swayPhase = Math.random() * Math.PI * 2;
-      group.add(strand);
+    // Canopée : amas de cubes de feuillage rose autour du sommet du tronc
+    const canopyCenterY = trunkY + 0.9;
+    const blossomVariant = Math.floor(Math.random() * 3);
+    const blossomMat = new THREE.MeshLambertMaterial({
+      map: blossomTexture(blossomVariant), emissive: 0x3a1428, emissiveIntensity: 0.22
+    });
+    const blossomMat2 = new THREE.MeshLambertMaterial({
+      map: blossomTexture((blossomVariant + 1) % 3), emissive: 0x3a1428, emissiveIntensity: 0.22
+    });
+    const clusterOffsets = [
+      [0, 0.35, 0, 1.5], [0.85, 0, 0.3, 1.05], [-0.85, 0, -0.2, 1.05],
+      [0.3, 0.15, 0.9, 1.1], [-0.3, 0.15, -0.9, 1.1], [0.9, 0.05, -0.7, 0.95],
+      [-0.9, 0.1, 0.7, 0.95], [0, 0.6, 0.5, 0.9], [0, 0.55, -0.5, 0.9], [0, 0.9, 0, 0.85]
+    ];
+    clusterOffsets.forEach((c, i) => {
+      const size = c[3] * (0.9 + Math.random() * 0.25);
+      const block = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size * 0.75, size),
+        i % 2 === 0 ? blossomMat : blossomMat2
+      );
+      block.position.set(c[0], canopyCenterY + c[1], c[2]);
+      block.rotation.y = Math.random() * Math.PI;
+      group.add(block);
+    });
+
+    // Branches pleureuses : chaînes de petits cubes fleuris qui
+    // descendent vers l'eau depuis le bord de la canopée
+    const strandCount = 9;
+    for (let i = 0; i < strandCount; i += 1) {
+      const angle = (i / strandCount) * Math.PI * 2 + Math.random() * 0.4;
+      const radius = 1.0 + Math.random() * 0.4;
+      const strandX = Math.cos(angle) * radius;
+      const strandZ = Math.sin(angle) * radius;
+      const strandLen = 3 + Math.floor(Math.random() * 3);
+      const strandGroup = new THREE.Group();
+      let y = canopyCenterY - 0.2;
+      for (let s = 0; s < strandLen; s += 1) {
+        const cubeSize = Math.max(0.14, 0.34 - s * 0.045);
+        const cube = new THREE.Mesh(
+          new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize),
+          s % 2 === 0 ? blossomMat : blossomMat2
+        );
+        cube.position.set(strandX + (Math.random() - 0.5) * 0.15, y, strandZ + (Math.random() - 0.5) * 0.15);
+        strandGroup.add(cube);
+        y -= cubeSize * 1.6;
+      }
+      strandGroup.userData.swayPhase = Math.random() * Math.PI * 2;
+      group.add(strandGroup);
     }
 
     group.position.set(x, 0, z);
@@ -661,17 +834,18 @@
     return group;
   }
 
+  // Poissons plats texturés (comme les koïs de la vallée principale)
+  // au lieu de boîtes de couleur unie.
   function buildFish() {
     const { THREE } = S.ctx;
-    const group = new THREE.Group();
-    const orange = new THREE.MeshLambertMaterial({ color: 0xff7a2e, emissive: 0x552300, emissiveIntensity: 0.25 });
-    const black = new THREE.MeshLambertMaterial({ color: 0x161311 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.5), Math.random() > 0.4 ? orange : black);
-    group.add(body);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.14, 0.2), body.material);
-    tail.position.z = 0.32;
-    group.add(tail);
-    return group;
+    const orange = Math.random() > 0.4;
+    const mat = new THREE.MeshBasicMaterial({
+      map: koiTexture(orange), transparent: true, side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), mat);
+    mesh.rotation.x = -Math.PI / 2;
+    return mesh;
   }
 
   function buildBoat() {
