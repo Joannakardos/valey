@@ -1407,6 +1407,8 @@ function animate() {
   renderer.render(scene, camera);
 }
 
+
+
 function updatePlayer() {
   if (state.overview) {
     const time = clock.getElapsedTime();
