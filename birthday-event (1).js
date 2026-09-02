@@ -20,10 +20,10 @@
   // 1. CONFIGURATION — à personnaliser
   // ============================================================
   const CONFIG = {
-    // L'événement démarre 2 minutes après l'ouverture de la page.
+    // L'événement démarre 1 minutes après l'ouverture de la page.
     // (Ancienne version basée sur le 20 septembre conservée en commentaire ci-dessous.)
     getTargetDate() {
-      return new Date(Date.now() + 2 * 60 * 1000);
+      return new Date(Date.now() + 60 * 1000);
     },
     // getTargetDate() {
     //   const now = new Date();
@@ -158,7 +158,7 @@
   function playWaterSplash() {
     const context = ensureAudio();
     if (!context) return;
-    context.resume().catch(() => {});
+    context.resume().catch(() => { });
     const bufferSize = context.sampleRate * 1.4;
     const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
     const data = buffer.getChannelData(0);
@@ -187,7 +187,7 @@
   function startAmbientLoop(target, options) {
     const context = ensureAudio();
     if (!context) return;
-    context.resume().catch(() => {});
+    context.resume().catch(() => { });
     const scale = options.scale;
     const root = options.root;
     let stepIndex = 0;
