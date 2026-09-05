@@ -270,6 +270,8 @@
     // Le compte à rebours n'est plus un écran qui bloque le jeu : c'est un texte
     // géant et lumineux posé dans le ciel de la vallée, comme le "I LOVE YOU" déjà
     // présent près de la lune. On peut continuer à se balader pendant qu'il tourne.
+    const loveText = S.ctx.scene.getObjectByName("moonLoveText");
+    if (loveText) loveText.visible = true;
     buildSkyCountdown();
     let target = CONFIG.getTargetDate().getTime();
     if (TEST_MODE) target = Date.now() + 8000;
@@ -315,8 +317,9 @@
       depthTest: false
     });
     const sprite = new THREE.Sprite(material);
-    sprite.scale.set(52, 20, 1);
-    sprite.position.set(0, 34, -58);
+    // Placé à droite du "I LOVE YOU" près de la lune.
+    sprite.scale.set(24, 9, 1);
+    sprite.position.set(40, 56, -30);
     sprite.renderOrder = 999;
     group.add(sprite);
 
@@ -327,9 +330,9 @@
     for (let i = 0; i < starCount; i += 1) {
       const angle = Math.random() * Math.PI * 2;
       const radius = 26 + Math.random() * 20;
-      starPos[i * 3] = Math.cos(angle) * radius;
-      starPos[i * 3 + 1] = 34 + Math.sin(angle) * 9 + (Math.random() - 0.5) * 6;
-      starPos[i * 3 + 2] = -58 + (Math.random() - 0.5) * 14;
+      starPos[i * 3] = 40 + Math.cos(angle) * radius * 0.45;
+      starPos[i * 3 + 1] = 56 + Math.sin(angle) * 4 + (Math.random() - 0.5) * 3;
+      starPos[i * 3 + 2] = -30 + (Math.random() - 0.5) * 7;
     }
     starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
     const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
@@ -377,8 +380,8 @@
     if (!S.sky) return;
     const elapsed = now() - S.sky.startedAt;
     const pulse = 1 + Math.sin(elapsed * 1.1) * 0.025;
-    S.sky.sprite.scale.set(52 * pulse, 20 * pulse, 1);
-    S.sky.sprite.position.y = 34 + Math.sin(elapsed * 0.6) * 0.8;
+    S.sky.sprite.scale.set(24 * pulse, 9 * pulse, 1);
+    S.sky.sprite.position.y = 56 + Math.sin(elapsed * 0.6) * 0.35;
     const starPos = S.sky.stars.geometry.attributes.position;
     for (let i = 0; i < starPos.count; i += 1) {
       const mat = S.sky.stars.material;
@@ -1716,15 +1719,15 @@
     }
   }
 
-  function update(, elapsed) {
+  function update(delta, elapsed) {
     if (!S.active) return;
     switch (S.phase) {
       case PHASE.RIVER_RIDE:
-        updateRiverRide(, elapsed);
+        updateRiverRide(delta, elapsed);
         break;
       case PHASE.SNOW_SCENE:
       case PHASE.FINALE:
-        updateSnowScene(, elapsed);
+        updateSnowScene(delta, elapsed);
         break;
       default:
         break;

@@ -1006,6 +1006,7 @@ function buildSky() {
   scene.add(moon);
 
   state.moonLoveText = createMoonLoveText();
+  state.moonLoveText.name = "moonLoveText";
   state.moonLoveText.position.set(MOON_POSITION.x + 14, MOON_POSITION.y + 1, MOON_POSITION.z);
   state.moonLoveText.visible = false;
   scene.add(state.moonLoveText);
