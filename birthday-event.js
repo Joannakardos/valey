@@ -543,6 +543,47 @@
     });
   }
 
+  // ------------------------------------------------------------
+  // Halo lumineux "faux" (sprite additif à dégradé radial) : donne
+  // une impression de lueur chaude autour des lanternes SANS ajouter
+  // une vraie THREE.PointLight. Beaucoup, beaucoup moins cher que des
+  // lumières réelles (aucun recalcul d'éclairage par pixel/objet),
+  // ce qui règle le ralentissement causé par les ~230 PointLight
+  // qu'on avait avant sur toute la scène de la rivière.
+  // ------------------------------------------------------------
+  let _glowTexture = null;
+  function glowSpriteTexture() {
+    if (_glowTexture) return _glowTexture;
+    const { THREE } = S.ctx;
+    const size = 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, "rgba(255,200,140,0.9)");
+    grad.addColorStop(0.4, "rgba(255,170,90,0.45)");
+    grad.addColorStop(1, "rgba(255,170,90,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    _glowTexture = tex;
+    return tex;
+  }
+
+  function addGlowSprite(group, position, scale) {
+    const { THREE } = S.ctx;
+    const mat = new THREE.SpriteMaterial({
+      map: glowSpriteTexture(), transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.position.copy(position);
+    sprite.scale.setScalar(scale);
+    group.add(sprite);
+    return sprite;
+  }
+
   // Eau sombre et légèrement pixelisée (au lieu d'un dégradé lisse),
   // qui accroche les reflets chauds des lanternes comme sur la photo.
   function waterTexture() {
@@ -857,12 +898,23 @@
       { depth: 8.5, count: Math.round(willowCount * 1.6), scale: 0.65, lightStyle: "lantern" },
       { depth: 12.5, count: Math.round(willowCount * 2), scale: 0.55, lightStyle: "glow" }
     ];
-    forestRows.forEach((row) => {
+    // On garde un tout petit nombre de vraies lumières dans la forêt (max 6
+    // au total, uniquement sur la rangée la plus proche) pour un peu de
+    // relief réel près de la rivière, sans revenir aux ~200 d'avant.
+    let realForestLightsLeft = 6;
+    forestRows.forEach((row, rowIndex) => {
       for (let i = 0; i < row.count; i += 1) {
         const z = 8 - i * (CONFIG.riverLength / row.count) + (Math.random() - 0.5) * 2.2;
         [-1, 1].forEach((side) => {
           const x = side * (CONFIG.riverWidth / 2 + row.depth + Math.random() * 2.4);
-          group.add(buildBackgroundTree(x, z, row.scale + Math.random() * 0.2, row.lightStyle));
+          const tree = buildBackgroundTree(x, z, row.scale + Math.random() * 0.2, row.lightStyle);
+          if (rowIndex === 0 && realForestLightsLeft > 0 && Math.random() > 0.85) {
+            const light = new THREE.PointLight(0xffb35c, 0.35, 5);
+            light.position.set(0.65, 1.6, 0.35);
+            tree.add(light);
+            realForestLightsLeft -= 1;
+          }
+          group.add(tree);
         });
       }
     });
@@ -939,9 +991,17 @@
         S.river.lanterns.push(lantern);
       });
     }
-    // Une seule vraie lumière ponctuelle tous les 3 lanternes pour rester léger
+    // Halo lumineux (sprite, pas de vraie lumière) sur TOUTES les lanternes :
+    // ça donne l'impression que chacune brille, pour un coût quasi nul.
+    S.river.lanterns.forEach((lantern) => {
+      addGlowSprite(lantern, new THREE.Vector3(0, 0, 0.02), 0.9);
+    });
+    // Une vraie lumière ponctuelle seulement tous les 12 lanternes (au lieu
+    // de tous les 3) : ça reste largement suffisant pour éclairer l'eau et
+    // le bateau au passage, sans multiplier les lumières dynamiques de la
+    // scène (qui sont ce qui ralentissait tout, cf. commentaire plus haut).
     S.river.lanterns.forEach((lantern, i) => {
-      if (i % 3 !== 0) return;
+      if (i % 12 !== 0) return;
       const light = new THREE.PointLight(0xffb35c, 0.55, 6);
       light.position.set(0, 0, 0);
       lantern.add(light);
@@ -1128,15 +1188,15 @@
       lantern.scale.setScalar(0.8);
       lantern.position.set(0.65, 1.6, 0.35);
       group.add(lantern);
-      if (Math.random() > 0.45) {
-        const light = new THREE.PointLight(0xffb35c, 0.4, 5);
-        light.position.set(0.65, 1.6, 0.35);
-        group.add(light);
-      }
+      // Halo en sprite au lieu d'une vraie PointLight : ces arbres sont en
+      // arrière-plan (rangées 1 à 3), une vraie lumière par arbre était
+      // beaucoup trop coûteuse (jusqu'à ~200 lumières rien que pour ces
+      // rangées) et c'est ça qui causait le ralentissement/l'écran noir.
+      addGlowSprite(group, new THREE.Vector3(0.65, 1.6, 0.35), 0.7);
     } else if (lightStyle === "glow") {
-      const glow = new THREE.PointLight(0xffb35c, 0.26, 4.5);
-      glow.position.set(0.4, 1.7, 0.2);
-      group.add(glow);
+      // Idem : simple halo, plus de PointLight systématique (c'était 100
+      // vraies lumières d'un coup sur la rangée la plus lointaine).
+      addGlowSprite(group, new THREE.Vector3(0.4, 1.7, 0.2), 0.6);
     }
 
     group.position.set(x, 0, z);
