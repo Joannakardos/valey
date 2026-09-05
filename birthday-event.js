@@ -9,6 +9,7 @@
  * Tests sans attendre le 20 septembre :
  *   ?bdayTest=1        -> le compte à rebours démarre à 8 secondes
  *   ?bdayPhase=river   -> saute direct au trajet en barque
+ *   ?bdayPhase=lake    -> saute direct à l'arrivée sur le lac (fin de la rivière)
  *   ?bdayPhase=snow    -> saute direct à la clairière enneigée
  * ------------------------------------------------------------
  */
@@ -37,6 +38,8 @@
     riverDuration: 34, // secondes, entre 30 et 40 comme demandé
     riverLength: 150,
     riverWidth: 7.2,
+    lakeRadius: 9, // rayon du petit lac à l'arrivée de la rivière
+    lakeLingerDuration: 3.2, // secondes passées à regarder autour avant le fondu blanc
     lockEntireSite: true, // true = le site s'ouvre directement sur le compte à rebours
     snowSceneMinDuration: 9 // secondes avant l'apparition du texte final
   };
@@ -50,7 +53,7 @@
     BLACKOUT: "blackout",
     RIVER_WAKE: "river_wake",
     RIVER_RIDE: "river_ride",
-    WATERFALL: "waterfall",
+    LAKE_ARRIVAL: "lake_arrival",
     WHITEOUT: "whiteout",
     SNOW_WAKE: "snow_wake",
     SNOW_SCENE: "snow_scene",
@@ -69,7 +72,7 @@
     audio: { context: null, master: null, riverNodes: [], snowNodes: [] },
     look: { yaw: 0, pitch: 0.05, dragging: false, lastX: 0, lastY: 0, touchId: null },
     boat: null,
-    river: { willows: [], fish: [], waterMesh: null, waterfallMesh: null, mist: [] },
+    river: { willows: [], fish: [], waterMesh: null, lakeMesh: null, mist: [] },
     snow: { group: null, auroraMaterials: [], snowflakes: null, textSprite: null },
     timers: [],
     phaseStartedAt: 0
@@ -461,6 +464,17 @@
       S.dom.lookLayer.classList.add("active");
       S.dom.hint.classList.add("show");
       startAmbientLoop("river", { root: 220, scale: [0, 3, 5, 7, 10, 12, 15] });
+    } else if (FORCE_PHASE === "lake") {
+      // Raccourci de test : place directement le bateau à l'arrêt sur le
+      // lac, pour vérifier le décor sans attendre tout le trajet en barque.
+      buildRiverScene();
+      positionCameraOnBoat();
+      S.boat.group.position.set(0, 0, S.river.lakeCenterZ + 1.5);
+      S.phase = PHASE.RIVER_RIDE;
+      S.phaseStartedAt = now();
+      S.dom.lookLayer.classList.add("active");
+      S.dom.hint.classList.add("show");
+      startAmbientLoop("river", { root: 220, scale: [0, 3, 5, 7, 10, 12, 15] });
     } else if (FORCE_PHASE === "snow") {
       buildSnowScene();
       S.phase = PHASE.SNOW_SCENE;
@@ -708,6 +722,132 @@
     return points;
   }
 
+  // ------------------------------------------------------------
+  // Bosquet de bambous voxel : quelques tiges vertes segmentées de
+  // hauteurs variées, plantées en petit paquet (comme sur la photo
+  // de référence, à gauche du bassin).
+  // ------------------------------------------------------------
+  function buildBambooCluster(x, z, stalkCount) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    for (let i = 0; i < stalkCount; i += 1) {
+      const variant = i % 2;
+      const mat = new THREE.MeshLambertMaterial({ map: bambooTexture(variant) });
+      const height = 2.4 + Math.random() * 1.6;
+      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, height, 6), mat);
+      stalk.position.set(
+        (Math.random() - 0.5) * 0.9,
+        height / 2,
+        (Math.random() - 0.5) * 0.9
+      );
+      stalk.rotation.y = Math.random() * Math.PI;
+      group.add(stalk);
+      // Petite touffe de feuilles en haut de la tige
+      const leafMat = new THREE.MeshLambertMaterial({ map: bambooTexture(variant), side: THREE.DoubleSide });
+      for (let l = 0; l < 3; l += 1) {
+        const leaf = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.14), leafMat);
+        leaf.position.set(stalk.position.x, height - 0.2 - l * 0.22, stalk.position.z);
+        leaf.rotation.y = Math.random() * Math.PI;
+        leaf.rotation.z = 0.5 + Math.random() * 0.4;
+        group.add(leaf);
+      }
+    }
+    group.position.set(x, 0, z);
+    group.userData.swayPhase = Math.random() * Math.PI * 2;
+    return group;
+  }
+
+  // Bordure de blocs de pierre autour du bassin, façon petit muret
+  // de jardin japonais voxel.
+  function buildLakeBorderBlock() {
+    const { THREE } = S.ctx;
+    const mat = new THREE.MeshLambertMaterial({ map: stoneTexture() });
+    const block = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.32 + Math.random() * 0.18, 0.55), mat);
+    return block;
+  }
+
+  // Fleur de lotus posée à la surface du bassin : quelques pétales
+  // en éventail + un centre doré, au-dessus d'un grand nénuphar.
+  function buildLotusFlower() {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const pad = new THREE.Mesh(
+      new THREE.CircleGeometry(0.42, 10),
+      new THREE.MeshLambertMaterial({ map: lilyPadTexture(), side: THREE.DoubleSide })
+    );
+    pad.rotation.x = -Math.PI / 2;
+    group.add(pad);
+
+    const petalMat = new THREE.MeshLambertMaterial({
+      color: 0xf7b3d2, emissive: 0x5a1f34, emissiveIntensity: 0.25, side: THREE.DoubleSide
+    });
+    const petalCount = 7;
+    for (let i = 0; i < petalCount; i += 1) {
+      const angle = (i / petalCount) * Math.PI * 2;
+      const petal = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.26, 5), petalMat);
+      petal.position.set(Math.cos(angle) * 0.12, 0.13, Math.sin(angle) * 0.12);
+      petal.rotation.x = Math.PI / 2.4;
+      petal.rotation.z = angle;
+      group.add(petal);
+    }
+    const center = new THREE.Mesh(
+      new THREE.SphereGeometry(0.09, 6, 6),
+      new THREE.MeshLambertMaterial({ color: 0xffe37a, emissive: 0xff9a3d, emissiveIntensity: 0.5 })
+    );
+    center.position.y = 0.18;
+    group.add(center);
+    return group;
+  }
+
+  // Petite bouée flottante avec sa propre lanterne, façon bateau-lanterne
+  // posé à la surface du lac.
+  function buildLakeBuoy() {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const raft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.32, 0.09, 8),
+      new THREE.MeshLambertMaterial({ map: barkTexture() })
+    );
+    group.add(raft);
+    const lantern = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.26, 0.22),
+      new THREE.MeshLambertMaterial({ map: lanternPaperTexture(), emissive: 0xff9a3d, emissiveIntensity: 0.8 })
+    );
+    lantern.position.y = 0.2;
+    group.add(lantern);
+    addGlowSprite(group, new THREE.Vector3(0, 0.2, 0), 0.6);
+    return group;
+  }
+
+  // Nuage de pétales qui tombent lentement au-dessus du lac, avec un
+  // léger balancement latéral. Simple Points + petite texture pétale :
+  // aucun coût d'éclairage, comme les étincelles/étoiles déjà utilisées.
+  function buildPetalSystem(centerZ, radius, count) {
+    const { THREE } = S.ctx;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    const swayPhase = new Float32Array(count);
+    const fallSpeed = new Float32Array(count);
+    for (let i = 0; i < count; i += 1) {
+      pos[i * 3] = (Math.random() - 0.5) * radius * 2.2;
+      pos[i * 3 + 1] = Math.random() * 8 + 1;
+      pos[i * 3 + 2] = centerZ + (Math.random() - 0.5) * radius * 2.2;
+      swayPhase[i] = Math.random() * Math.PI * 2;
+      fallSpeed[i] = 0.25 + Math.random() * 0.3;
+    }
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      map: petalTexture(), color: 0xffffff, size: 0.22, transparent: true,
+      opacity: 0.9, depthWrite: false
+    });
+    const points = new THREE.Points(geo, mat);
+    points.userData.swayPhase = swayPhase;
+    points.userData.fallSpeed = fallSpeed;
+    points.userData.radius = radius;
+    points.userData.centerZ = centerZ;
+    return points;
+  }
+
   function lanternPaperTexture() {
     return pixelTexture("lanternPaper", 16, (ctx, size) => {
       ctx.fillStyle = "#fff2c8";
@@ -734,6 +874,50 @@
       ctx.fillRect(6, 5, 4, 3);
       ctx.fillStyle = "#f2f2ea";
       ctx.fillRect(9, 6, 2, 2);
+    });
+  }
+
+  // ------------------------------------------------------------
+  // Textures pour la clairière-lac au bout de la rivière : bambou
+  // (rayures vertes façon tige voxel) et pierre (bordure du bassin).
+  // ------------------------------------------------------------
+  function bambooTexture(variant) {
+    return pixelTexture(`bamboo${variant}`, 16, (ctx, size) => {
+      const greens = [["#6fae3a", "#8fd955"], ["#5c9a30", "#7fc94a"]];
+      const [dark, light] = greens[variant % greens.length];
+      ctx.fillStyle = light;
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = dark;
+      ctx.fillRect(0, 0, size, 2);
+      ctx.fillRect(0, 7, size, 2);
+      ctx.fillRect(0, 14, size, 2);
+      ctx.fillStyle = "#4a7a24";
+      ctx.fillRect(0, 6, size, 1);
+      ctx.fillRect(0, 13, size, 1);
+    });
+  }
+
+  function stoneTexture() {
+    return pixelTexture("lakeStone", 16, (ctx, size) => {
+      const cell = size / 8;
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          const n = (x * 5 + y * 3) % 5;
+          ctx.fillStyle = n < 2 ? "#5c6068" : n < 4 ? "#71767e" : "#484c53";
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+  }
+
+  function petalTexture() {
+    return pixelTexture("petalFall", 8, (ctx, size) => {
+      ctx.clearRect(0, 0, size, size);
+      ctx.fillStyle = "#f6a8c4";
+      ctx.fillRect(1, 2, 6, 4);
+      ctx.fillRect(2, 1, 4, 6);
+      ctx.fillStyle = "#ffd6e6";
+      ctx.fillRect(3, 3, 2, 2);
     });
   }
 
@@ -839,7 +1023,7 @@
     const forestFloorMat = new THREE.MeshLambertMaterial({ map: grassFloorTexture() });
     [-1, 1].forEach((side) => {
       const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(24, CONFIG.riverLength + 24),
+        new THREE.PlaneGeometry(24, CONFIG.riverLength + 60),
         forestFloorMat
       );
       floor.rotation.x = -Math.PI / 2;
@@ -955,27 +1139,135 @@
       return { mesh, delay: i * 9, duration: 13, cycle: 27 };
     });
 
-    // Chute d'eau à l'extrémité du parcours
-    const waterfallGeo = new THREE.PlaneGeometry(CONFIG.riverWidth + 2, 9);
-    const waterfallMat = new THREE.MeshBasicMaterial({
-      color: 0xbfe4ff, transparent: true, opacity: 0.75, side: THREE.DoubleSide
-    });
-    const waterfall = new THREE.Mesh(waterfallGeo, waterfallMat);
-    waterfall.position.set(0, 3.5, -CONFIG.riverLength + 4);
-    group.add(waterfall);
-    S.river.waterfallMesh = waterfall;
+    // ------------------------------------------------------------
+    // CLAIRIÈRE-LAC : la rivière ne s'arrête plus "dans le vide", elle
+    // s'ouvre sur un petit lac rond entouré de bambous, de cerisiers
+    // pleureurs, de lanternes et de nénuphars (façon photo de référence),
+    // pour qu'on sente vraiment qu'on arrive quelque part plutôt que
+    // d'avoir l'impression que la rivière est infinie.
+    // ------------------------------------------------------------
+    const lakeRadius = CONFIG.lakeRadius;
+    const lakeCenterZ = -CONFIG.riverLength + 4;
+    S.river.lakeCenterZ = lakeCenterZ;
 
-    // Brume au pied de la chute
+    // Bassin : eau plus calme (moins de reflets qu'en pleine rivière),
+    // qui chevauche la fin du couloir pour qu'il n'y ait pas de coupure visible.
+    const lakeGeo = new THREE.CircleGeometry(lakeRadius, 24);
+    const lakeMat = new THREE.MeshStandardMaterial({
+      map: waterTexture(), color: 0x2e5a78, roughness: 0.12, metalness: 0.3,
+      transparent: true, opacity: 0.86, emissive: 0x0a1a2a, emissiveIntensity: 0.35
+    });
+    const lake = new THREE.Mesh(lakeGeo, lakeMat);
+    lake.rotation.x = -Math.PI / 2;
+    lake.position.set(0, 0.015, lakeCenterZ);
+    group.add(lake);
+    S.river.lakeMesh = lake;
+
+    // Muret de blocs de pierre tout autour du bassin
+    const borderCount = 26;
+    for (let i = 0; i < borderCount; i += 1) {
+      const angle = (i / borderCount) * Math.PI * 2;
+      const block = buildLakeBorderBlock();
+      block.position.set(
+        Math.cos(angle) * (lakeRadius + 0.35),
+        0.16,
+        lakeCenterZ + Math.sin(angle) * (lakeRadius + 0.35)
+      );
+      block.rotation.y = Math.random() * Math.PI;
+      group.add(block);
+    }
+
+    // Cerisiers pleureurs autour du bassin, plus denses qu'ailleurs pour
+    // former une voûte de fleurs au-dessus de l'eau comme sur la photo.
+    const lakeTreeCount = 11;
+    for (let i = 0; i < lakeTreeCount; i += 1) {
+      const angle = (i / lakeTreeCount) * Math.PI * 2 + Math.random() * 0.2;
+      const dist = lakeRadius + 1.6 + Math.random() * 1.6;
+      const tree = buildWillow(Math.cos(angle) * dist, lakeCenterZ + Math.sin(angle) * dist);
+      group.add(tree);
+    }
+
+    // Bosquets de bambous, concentrés d'un côté du bassin (comme sur la photo)
+    S.river.lakeBamboo = [];
+    const bambooClusterCount = 6;
+    for (let i = 0; i < bambooClusterCount; i += 1) {
+      const angle = Math.PI * 0.55 + (i / bambooClusterCount) * Math.PI * 0.9;
+      const dist = lakeRadius + 0.9 + Math.random() * 1.2;
+      const cluster = buildBambooCluster(
+        Math.cos(angle) * dist,
+        lakeCenterZ + Math.sin(angle) * dist,
+        3 + Math.floor(Math.random() * 3)
+      );
+      group.add(cluster);
+      S.river.lakeBamboo.push(cluster);
+    }
+
+    // Quelques lanternes sur pied autour du bassin
+    S.river.lakePosts = [];
+    const lakeLanternCount = 8;
+    for (let i = 0; i < lakeLanternCount; i += 1) {
+      const angle = (i / lakeLanternCount) * Math.PI * 2 + 0.3;
+      const dist = lakeRadius + 0.6;
+      const post = buildLanternPost(Math.cos(angle) * dist, lakeCenterZ + Math.sin(angle) * dist, false);
+      addGlowSprite(post, new THREE.Vector3(0.5, 1.42, 0), 0.7);
+      group.add(post);
+      S.river.lakePosts.push(post);
+    }
+    // Seulement 3 vraies lumières réparties autour du lac (jamais une par lanterne)
+    [0, 3, 6].forEach((i) => {
+      const post = S.river.lakePosts[i];
+      if (!post) return;
+      const light = new THREE.PointLight(0xffb35c, 0.5, 6);
+      light.position.set(0.5, 1.42, 0);
+      post.add(light);
+    });
+
+    // Nénuphars denses + une grande fleur de lotus au centre du bassin
+    S.river.lakeLilyPads = [];
+    for (let i = 0; i < 22; i += 1) {
+      const pad = buildLilyPad();
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * (lakeRadius - 0.6);
+      pad.position.set(Math.cos(a) * r, 0.05, lakeCenterZ + Math.sin(a) * r);
+      pad.userData.bobPhase = Math.random() * Math.PI * 2;
+      group.add(pad);
+      S.river.lakeLilyPads.push(pad);
+    }
+    const lotus = buildLotusFlower();
+    lotus.position.set(1.4, 0.05, lakeCenterZ - 1.2);
+    lotus.userData.bobPhase = Math.random() * Math.PI * 2;
+    group.add(lotus);
+    S.river.lakeLilyPads.push(lotus);
+
+    // Petites bouées-lanternes flottantes
+    S.river.lakeBuoys = [];
+    for (let i = 0; i < 4; i += 1) {
+      const buoy = buildLakeBuoy();
+      const a = Math.random() * Math.PI * 2;
+      const r = lakeRadius * 0.55 + Math.random() * lakeRadius * 0.25;
+      buoy.position.set(Math.cos(a) * r, 0.08, lakeCenterZ + Math.sin(a) * r);
+      buoy.userData.bobPhase = Math.random() * Math.PI * 2;
+      group.add(buoy);
+      S.river.lakeBuoys.push(buoy);
+    }
+
+    // Légère brume au ras de l'eau, tout autour du bassin
     const mistGeo = new THREE.SphereGeometry(0.4, 6, 6);
-    const mistMat = new THREE.MeshBasicMaterial({ color: 0xdfeeff, transparent: true, opacity: 0.18 });
+    const mistMat = new THREE.MeshBasicMaterial({ color: 0xdfeeff, transparent: true, opacity: 0.14 });
     S.river.mist = [];
-    for (let i = 0; i < 18; i += 1) {
+    for (let i = 0; i < 14; i += 1) {
       const puff = new THREE.Mesh(mistGeo, mistMat.clone());
-      puff.position.set((Math.random() - 0.5) * 6, Math.random() * 3, -CONFIG.riverLength + 4 + (Math.random() - 0.5) * 3);
-      puff.scale.setScalar(1 + Math.random());
+      const a = Math.random() * Math.PI * 2;
+      const r = lakeRadius * (0.6 + Math.random() * 0.5);
+      puff.position.set(Math.cos(a) * r, Math.random() * 0.8, lakeCenterZ + Math.sin(a) * r);
+      puff.scale.setScalar(0.8 + Math.random());
       group.add(puff);
       S.river.mist.push(puff);
     }
+
+    // Pétales qui tombent doucement au-dessus du bassin
+    S.river.petals = buildPetalSystem(lakeCenterZ, lakeRadius + 3, 90);
+    group.add(S.river.petals);
 
     // Petites lanternes chaudes suspendues le long des berges, façon guirlande
     S.river.lanterns = [];
@@ -1956,8 +2248,19 @@
   }
 
   function updateRiverRide(delta, elapsed) {
-    const speed = CONFIG.riverLength / CONFIG.riverDuration;
-    S.boat.group.position.z -= speed * delta;
+    // Le bateau ralentit progressivement en approchant du lac (au lieu de
+    // filer à vitesse constante puis de s'arrêter d'un coup) : ça donne
+    // une vraie sensation d'arriver quelque part plutôt que d'avoir
+    // l'impression que la rivière ne s'arrête jamais.
+    const baseSpeed = CONFIG.riverLength / CONFIG.riverDuration;
+    const distToLake = S.boat.group.position.z - S.river.lakeCenterZ;
+    const slowZone = 10;
+    let speedFactor = 1;
+    if (distToLake < slowZone) {
+      const t = Math.max(0, distToLake / slowZone);
+      speedFactor = 0.35 + 0.65 * (t * t);
+    }
+    S.boat.group.position.z -= baseSpeed * speedFactor * delta;
     S.boat.group.position.y = Math.sin(elapsed * 1.3 + S.boat.bobPhase) * 0.035;
     S.boat.group.rotation.z = Math.sin(elapsed * 1.1 + S.boat.bobPhase) * 0.02;
     applyLook();
@@ -1970,9 +2273,6 @@
       f.mesh.position.z += Math.sin(elapsed * 0.6 + f.phase) * 0.006;
       f.mesh.rotation.y = Math.sin(elapsed * 0.8 + f.phase) * 0.4;
     });
-    if (S.river.waterfallMesh) {
-      S.river.waterfallMesh.material.opacity = 0.7 + Math.sin(elapsed * 3) * 0.05;
-    }
     S.river.mist.forEach((m, i) => {
       m.position.y = 0.5 + Math.sin(elapsed * 1.2 + i) * 0.4;
       m.material.opacity = 0.12 + Math.sin(elapsed * 2 + i) * 0.05;
@@ -1995,11 +2295,56 @@
       updateFireflies(elapsed);
     }
 
-    const reachedEnd = S.boat.group.position.z <= -CONFIG.riverLength + 10;
-    const timeUp = now() - S.phaseStartedAt >= CONFIG.riverDuration;
-    if (reachedEnd || timeUp) {
-      startWaterfallArrival();
+    // --- Clairière-lac : bosquets de bambous, nénuphars/lotus, bouées ---
+    if (S.river.lakeBamboo) {
+      S.river.lakeBamboo.forEach((b) => {
+        b.rotation.z = Math.sin(elapsed * 0.6 + b.userData.swayPhase) * 0.025;
+      });
     }
+    if (S.river.lakeLilyPads) {
+      S.river.lakeLilyPads.forEach((p) => {
+        p.position.y = 0.05 + Math.sin(elapsed * 1.1 + p.userData.bobPhase) * 0.015;
+      });
+    }
+    if (S.river.lakeBuoys) {
+      S.river.lakeBuoys.forEach((b) => {
+        b.position.y = 0.08 + Math.sin(elapsed * 1.2 + b.userData.bobPhase) * 0.03;
+        b.rotation.y = elapsed * 0.15 + b.userData.bobPhase;
+      });
+    }
+    if (S.river.petals) {
+      updatePetals(delta, elapsed);
+    }
+
+    // On considère qu'on est "arrivé" quand le bateau a bien ralenti et
+    // dérive tout près du centre du lac (avec la limite de temps en
+    // filet de sécurité, au cas où).
+    const nearLakeCenter = distToLake <= 4;
+    const timeUp = now() - S.phaseStartedAt >= CONFIG.riverDuration + 6;
+    if (nearLakeCenter || timeUp) {
+      startLakeArrival();
+    }
+  }
+
+  function updatePetals(delta, elapsed) {
+    const points = S.river.petals;
+    const pos = points.geometry.attributes.position;
+    const sway = points.userData.swayPhase;
+    const speed = points.userData.fallSpeed;
+    const radius = points.userData.radius;
+    const centerZ = points.userData.centerZ;
+    for (let i = 0; i < pos.count; i += 1) {
+      let y = pos.getY(i) - speed[i] * delta;
+      let x = pos.getX(i) + Math.sin(elapsed * 0.6 + sway[i]) * delta * 0.35;
+      if (y < 0) {
+        y = 7 + Math.random() * 2;
+        x = (Math.random() - 0.5) * radius * 2.2;
+        pos.setZ(i, centerZ + (Math.random() - 0.5) * radius * 2.2);
+      }
+      pos.setX(i, x);
+      pos.setY(i, y);
+    }
+    pos.needsUpdate = true;
   }
 
   function updateFireflies(elapsed) {
@@ -2032,13 +2377,16 @@
     });
   }
 
-  async function startWaterfallArrival() {
+  async function startLakeArrival() {
     if (S.phase !== PHASE.RIVER_RIDE) return;
-    S.phase = PHASE.WATERFALL;
+    S.phase = PHASE.LAKE_ARRIVAL;
+    playWaterSplash();
+    // On laisse le bateau flotter tranquillement sur le lac, avec toujours
+    // la possibilité de regarder autour de soi (bambous, lanternes, lotus),
+    // avant de passer au fondu blanc.
+    await new Promise((r) => setTimeout(r, CONFIG.lakeLingerDuration * 1000));
     S.dom.lookLayer.classList.remove("active");
     S.dom.hint.classList.remove("show");
-    playWaterSplash();
-    await new Promise((r) => setTimeout(r, 1400));
     S.phase = PHASE.WHITEOUT;
     await fade(S.dom.fadeWhite, true, 1400);
     stopAllAudioLoops();
