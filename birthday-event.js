@@ -576,6 +576,97 @@
     });
   }
 
+  // Même motif d'herbe que les berges, mais dans une texture séparée et
+  // répétée en tuiles, pour couvrir tout le sol de la forêt sans changer
+  // l'apparence des berges elles-mêmes.
+  function grassFloorTexture() {
+    const { THREE } = S.ctx;
+    const tex = pixelTexture("forestFloor", 16, (ctx, size) => {
+      const cell = size / 8;
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          const n = (x * 7 + y * 5) % 6;
+          ctx.fillStyle = n < 3 ? "#1e5a24" : n < 5 ? "#256b2b" : "#173f1c";
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(18, Math.max(10, Math.round(CONFIG.riverLength / 6)));
+    return tex;
+  }
+
+  // Nénuphar flottant : pad rond texturé + une petite fleur rose sur environ
+  // 6 pads sur 10, dispersés sur les deux côtés de la rivière.
+  function lilyPadTexture() {
+    return pixelTexture("lilyPad", 16, (ctx, size) => {
+      ctx.fillStyle = "#123a1f";
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#1f6b3a";
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2 - 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#2c8a4a";
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2 - 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#154a28";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(size / 2, size / 2);
+      ctx.lineTo(size / 2, 1.5);
+      ctx.stroke();
+    });
+  }
+
+  function buildLilyPad() {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const pad = new THREE.Mesh(
+      new THREE.CircleGeometry(0.2 + Math.random() * 0.12, 8),
+      new THREE.MeshLambertMaterial({ map: lilyPadTexture(), side: THREE.DoubleSide })
+    );
+    pad.rotation.x = -Math.PI / 2;
+    pad.rotation.z = Math.random() * Math.PI;
+    group.add(pad);
+    if (Math.random() > 0.4) {
+      const flower = new THREE.Mesh(
+        new THREE.ConeGeometry(0.09, 0.11, 6),
+        new THREE.MeshLambertMaterial({ color: 0xf6a8c4, emissive: 0x5a1f34, emissiveIntensity: 0.2 })
+      );
+      flower.position.y = 0.05;
+      group.add(flower);
+    }
+    return group;
+  }
+
+  // Nuée de lucioles : un petit nuage de points lumineux jaune-vert qui
+  // traverse la rivière de gauche à droite en s'éloignant vers l'horizon,
+  // puis disparaît le temps que les deux autres nuées fassent leur trajet.
+  function buildFireflySwarm(seed) {
+    const { THREE } = S.ctx;
+    const count = 14;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i += 1) {
+      pos[i * 3] = (Math.random() - 0.5) * 1.5;
+      pos[i * 3 + 1] = Math.random() * 1.2;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 1.5;
+    }
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0xd8ff8a, size: 0.1, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const points = new THREE.Points(geo, mat);
+    points.userData.basePositions = pos.slice();
+    points.userData.seed = seed * 3.7;
+    points.visible = false;
+    return points;
+  }
+
   function lanternPaperTexture() {
     return pixelTexture("lanternPaper", 16, (ctx, size) => {
       ctx.fillStyle = "#fff2c8";
@@ -592,17 +683,84 @@
     });
   }
 
-  function koiTexture(orange) {
-    return pixelTexture(orange ? "koiOrange" : "koiBlack", 16, (ctx, size) => {
+  function koiTexture(red) {
+    return pixelTexture(red ? "koiRed" : "koiBlack", 16, (ctx, size) => {
       ctx.clearRect(0, 0, size, size);
-      ctx.fillStyle = orange ? "#ff7a2e" : "#141210";
+      ctx.fillStyle = red ? "#e8241f" : "#141210";
       ctx.fillRect(2, 5, 11, 6);
       ctx.fillRect(5, 3, 7, 10);
-      ctx.fillStyle = orange ? "#ffb27a" : "#3a3530";
+      ctx.fillStyle = red ? "#ff6a52" : "#3a3530";
       ctx.fillRect(6, 5, 4, 3);
       ctx.fillStyle = "#f2f2ea";
       ctx.fillRect(9, 6, 2, 2);
     });
+  }
+
+  // ------------------------------------------------------------
+  // Sabre voxel (katana) posé sur un petit présentoir en bois —
+  // décor façon jardin japonais, planté le long des berges à
+  // quelques endroits choisis.
+  // ------------------------------------------------------------
+  function bladeTexture() {
+    return pixelTexture("katanaBlade", 16, (ctx, size) => {
+      ctx.fillStyle = "#dfe6ec";
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = "#c3ccd4";
+      ctx.fillRect(0, 6, size, 2);
+      ctx.fillStyle = "#f4f8fb";
+      ctx.fillRect(0, 0, size, 1);
+    });
+  }
+
+  function buildKatana(scaleMul) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const bladeMat = new THREE.MeshLambertMaterial({ map: bladeTexture(), emissive: 0x1a2028, emissiveIntensity: 0.15 });
+    const hiltMat = new THREE.MeshLambertMaterial({ color: 0x241811 });
+    const guardMat = new THREE.MeshLambertMaterial({ color: 0xb8863a });
+
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.045, 1.15), bladeMat);
+    blade.position.z = -0.6;
+    group.add(blade);
+
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.05, 0.06), guardMat);
+    guard.position.z = 0.02;
+    group.add(guard);
+
+    const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.32), hiltMat);
+    hilt.position.z = 0.2;
+    group.add(hilt);
+
+    group.rotation.x = Math.PI / 2;
+    group.scale.setScalar(scaleMul || 1);
+    return group;
+  }
+
+  function buildKatanaStand(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const wood = new THREE.MeshLambertMaterial({ map: barkTexture() });
+
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.28), wood);
+    base.position.y = 0.55;
+    group.add(base);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.08), wood);
+    post.position.y = 0.28;
+    group.add(post);
+
+    // Deux sabres croisés, légèrement inclinés, posés sur le présentoir
+    const katanaA = buildKatana(1);
+    katanaA.position.set(0, 0.68, 0);
+    katanaA.rotation.z = 0.35;
+    group.add(katanaA);
+    const katanaB = buildKatana(0.9);
+    katanaB.position.set(0, 0.6, 0);
+    katanaB.rotation.z = -0.35;
+    group.add(katanaB);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
   }
 
   function buildRiverScene() {
@@ -613,10 +771,11 @@
     S.river.group = group;
 
     // Eau : long ruban rectiligne, texture pixel sombre + reflets chauds animés
+    // Opacité légèrement réduite pour bien laisser voir les poissons sous la surface.
     const waterGeo = new THREE.PlaneGeometry(CONFIG.riverWidth, CONFIG.riverLength, 1, 40);
     const waterMat = new THREE.MeshStandardMaterial({
       map: waterTexture(), color: 0x3d6f8f, roughness: 0.18, metalness: 0.25,
-      transparent: true, opacity: 0.95, emissive: 0x0a1a2a, emissiveIntensity: 0.4
+      transparent: true, opacity: 0.82, emissive: 0x0a1a2a, emissiveIntensity: 0.4
     });
     const water = new THREE.Mesh(waterGeo, waterMat);
     water.rotation.x = -Math.PI / 2;
@@ -633,13 +792,50 @@
       group.add(bank);
     });
 
+    // Fond d'herbe qui s'étend sous toute la forêt (même texture que les
+    // berges), pour que les rangées d'arbres les plus loin aient un vrai
+    // sol au lieu de sembler posées sur du vide.
+    const forestFloorMat = new THREE.MeshLambertMaterial({ map: grassFloorTexture() });
+    [-1, 1].forEach((side) => {
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(24, CONFIG.riverLength + 24),
+        forestFloorMat
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(side * (CONFIG.riverWidth / 2 + 12.5), -0.02, -CONFIG.riverLength / 2 + 4);
+      group.add(floor);
+    });
+
     // Lumière de lune douce + points de lumière chauds des lanternes de saule
     const moonLight = new THREE.DirectionalLight(0x99b4ff, 0.35);
     moonLight.position.set(-10, 30, 10);
     group.add(moonLight);
     group.add(new THREE.AmbientLight(0x24304f, 0.55));
 
-    // Saules pleureurs fleuris le long des deux rives
+    // Ciel bien étoilé pour la traversée nocturne
+    const riverStarGeo = new THREE.BufferGeometry();
+    const riverStarCount = 500;
+    const riverStarPos = new Float32Array(riverStarCount * 3);
+    for (let i = 0; i < riverStarCount; i += 1) {
+      const r = 90 + Math.random() * 60;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 0.5;
+      riverStarPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      riverStarPos[i * 3 + 1] = 15 + r * Math.cos(phi) * 0.7;
+      riverStarPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta) - CONFIG.riverLength / 2;
+    }
+    riverStarGeo.setAttribute("position", new THREE.BufferAttribute(riverStarPos, 3));
+    const riverStars = new THREE.Points(riverStarGeo, new THREE.PointsMaterial({
+      color: 0xffffff, size: 0.5, transparent: true, opacity: 0.9
+    }));
+    group.add(riverStars);
+
+    // ------------------------------------------------------------
+    // FORÊT : rangée détaillée de saules pleureurs au bord de l'eau,
+    // puis plusieurs rangées d'arbres plus simples et plus denses en
+    // profondeur, pour donner l'impression d'être dans une vraie forêt
+    // et pas juste d'avoir des arbres "posés à côté" de la rivière.
+    // ------------------------------------------------------------
     const willowCount = Math.floor(CONFIG.riverLength / 6);
     for (let i = 0; i < willowCount; i += 1) {
       const z = 6 - i * 6 + (Math.random() - 0.5) * 1.5;
@@ -649,18 +845,63 @@
       });
     }
 
-    // Poissons oranges et noirs
+    // Rangées supplémentaires en arrière-plan : 4 profondeurs, de plus en
+    // plus denses et de plus en plus loin des berges, avec des arbres plus
+    // simples (moins coûteux) pour remplir l'arrière-plan sans ralentir.
+    // Les 3 premières rangées portent chacune une petite lanterne (comme
+    // demandé) ; la rangée la plus lointaine n'a qu'une lueur chaude sans
+    // lanterne visible, pour rester légère et suggérer la profondeur.
+    const forestRows = [
+      { depth: 3.2, count: willowCount, scale: 0.85, lightStyle: "lantern" },
+      { depth: 5.5, count: Math.round(willowCount * 1.3), scale: 0.75, lightStyle: "lantern" },
+      { depth: 8.5, count: Math.round(willowCount * 1.6), scale: 0.65, lightStyle: "lantern" },
+      { depth: 12.5, count: Math.round(willowCount * 2), scale: 0.55, lightStyle: "glow" }
+    ];
+    forestRows.forEach((row) => {
+      for (let i = 0; i < row.count; i += 1) {
+        const z = 8 - i * (CONFIG.riverLength / row.count) + (Math.random() - 0.5) * 2.2;
+        [-1, 1].forEach((side) => {
+          const x = side * (CONFIG.riverWidth / 2 + row.depth + Math.random() * 2.4);
+          group.add(buildBackgroundTree(x, z, row.scale + Math.random() * 0.2, row.lightStyle));
+        });
+      }
+    });
+
+    // Poissons rouges et noirs, bien visibles sous une eau moins opaque
     S.river.fish = [];
-    for (let i = 0; i < 12; i += 1) {
+    for (let i = 0; i < 18; i += 1) {
       const fish = buildFish();
       fish.position.set(
         (Math.random() - 0.5) * (CONFIG.riverWidth - 1.5),
-        -0.15 + Math.random() * 0.1,
+        -0.18 + Math.random() * 0.12,
         6 - Math.random() * CONFIG.riverLength
       );
       group.add(fish);
       S.river.fish.push({ mesh: fish, phase: Math.random() * Math.PI * 2, speedZ: 0.4 + Math.random() * 0.3 });
     }
+
+    // Nénuphars flottant à la surface, dispersés sur les deux côtés de la rivière
+    S.river.lilyPads = [];
+    const lilyCount = Math.floor(CONFIG.riverLength / 5);
+    for (let i = 0; i < lilyCount; i += 1) {
+      const pad = buildLilyPad();
+      pad.position.set(
+        (Math.random() > 0.5 ? 1 : -1) * (0.8 + Math.random() * (CONFIG.riverWidth / 2 - 1)),
+        0.06,
+        5 - Math.random() * CONFIG.riverLength
+      );
+      pad.userData.bobPhase = Math.random() * Math.PI * 2;
+      group.add(pad);
+      S.river.lilyPads.push(pad);
+    }
+
+    // Trois nuées de lucioles qui s'envolent l'une après l'autre (pas en même
+    // temps) de la rive gauche vers la rive droite, en s'éloignant vers l'horizon.
+    S.river.fireflySwarms = [0, 1, 2].map((i) => {
+      const mesh = buildFireflySwarm(i);
+      group.add(mesh);
+      return { mesh, delay: i * 9, duration: 13, cycle: 27 };
+    });
 
     // Chute d'eau à l'extrémité du parcours
     const waterfallGeo = new THREE.PlaneGeometry(CONFIG.riverWidth + 2, 9);
@@ -705,6 +946,19 @@
       light.position.set(0, 0, 0);
       lantern.add(light);
     });
+
+    // Quelques présentoirs à sabres plantés le long des berges, entre les
+    // lanternes, façon petit jardin japonais.
+    S.river.katanaStands = [];
+    const katanaCount = Math.max(3, Math.floor(CONFIG.riverLength / 22));
+    for (let i = 0; i < katanaCount; i += 1) {
+      const z = -6 - i * 22 + (Math.random() - 0.5) * 4;
+      const side = i % 2 === 0 ? -1 : 1;
+      const x = side * (CONFIG.riverWidth / 2 + 0.55);
+      const stand = buildKatanaStand(x, z, side > 0 ? Math.PI : 0);
+      group.add(stand);
+      S.river.katanaStands.push(stand);
+    }
 
     // Reflets scintillants à la surface de l'eau
     const sparkGeo = new THREE.BufferGeometry();
@@ -760,7 +1014,7 @@
   // Cerisier pleureur voxel : tronc en blocs + canopée faite d'un
   // amas de cubes texturés (feuillage rose façon Minecraft), avec
   // des chaînes de petits cubes qui pendent vers l'eau pour l'effet
-  // "pleureur". Remplace l'ancien saule en sphère lisse.
+  // "pleureur". Utilisé pour la rangée d'arbres la plus proche de l'eau.
   // ------------------------------------------------------------
   function buildWillow(x, z) {
     const { THREE } = S.ctx;
@@ -837,13 +1091,67 @@
     return group;
   }
 
-  // Poissons plats texturés (comme les koïs de la vallée principale)
-  // au lieu de boîtes de couleur unie.
+  // ------------------------------------------------------------
+  // Arbre d'arrière-plan simplifié (tronc + canopée compacte, sans
+  // branches pleureuses) : bien moins coûteux que buildWillow, pensé
+  // pour remplir plusieurs rangées profondes et donner une vraie
+  // impression de forêt derrière la rivière plutôt qu'une simple haie.
+  // ------------------------------------------------------------
+  function buildBackgroundTree(x, z, scale, lightStyle) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const bark = new THREE.MeshLambertMaterial({ map: barkTexture() });
+    const variant = Math.floor(Math.random() * 3);
+    const blossomMat = new THREE.MeshLambertMaterial({
+      map: blossomTexture(variant), emissive: 0x2a0f1e, emissiveIntensity: 0.16
+    });
+
+    const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.5, 0.34), bark);
+    trunk.position.y = 0.75;
+    group.add(trunk);
+
+    const canopyBlocks = [
+      [0, 1.9, 0, 1.3], [0.55, 1.7, 0.25, 0.85], [-0.55, 1.7, -0.25, 0.85],
+      [0.25, 2.25, -0.4, 0.75], [-0.3, 2.2, 0.35, 0.75]
+    ];
+    canopyBlocks.forEach((c) => {
+      const block = new THREE.Mesh(new THREE.BoxGeometry(c[3], c[3] * 0.8, c[3]), blossomMat);
+      block.position.set(c[0], c[1], c[2]);
+      block.rotation.y = Math.random() * Math.PI;
+      group.add(block);
+    });
+
+    // Petite lanterne accrochée à une branche (rangées proches) ou simple
+    // lueur chaude sans géométrie (rangée la plus lointaine, pour rester léger)
+    if (lightStyle === "lantern") {
+      const lantern = buildHangingLantern();
+      lantern.scale.setScalar(0.8);
+      lantern.position.set(0.65, 1.6, 0.35);
+      group.add(lantern);
+      if (Math.random() > 0.45) {
+        const light = new THREE.PointLight(0xffb35c, 0.4, 5);
+        light.position.set(0.65, 1.6, 0.35);
+        group.add(light);
+      }
+    } else if (lightStyle === "glow") {
+      const glow = new THREE.PointLight(0xffb35c, 0.26, 4.5);
+      glow.position.set(0.4, 1.7, 0.2);
+      group.add(glow);
+    }
+
+    group.position.set(x, 0, z);
+    group.scale.setScalar(scale);
+    group.userData.swayPhase = Math.random() * Math.PI * 2;
+    return group;
+  }
+
+  // Poissons plats rouges/noirs texturés (comme les koïs de la vallée
+  // principale), désormais bien visibles à travers l'eau moins opaque.
   function buildFish() {
     const { THREE } = S.ctx;
-    const orange = Math.random() > 0.4;
+    const red = Math.random() > 0.35;
     const mat = new THREE.MeshBasicMaterial({
-      map: koiTexture(orange), transparent: true, side: THREE.DoubleSide,
+      map: koiTexture(red), transparent: true, side: THREE.DoubleSide,
       depthWrite: false
     });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), mat);
@@ -1553,7 +1861,7 @@
       S.look.lastX = x;
       S.look.lastY = y;
       S.look.yaw -= dx * 0.0035;
-      S.look.pitch = Math.max(-0.6, Math.min(0.6, S.look.pitch - dy * 0.0035));
+      S.look.pitch = Math.max(-1.15, Math.min(1.15, S.look.pitch - dy * 0.0035));
     };
     const onEnd = () => { S.look.dragging = false; S.look.touchId = null; };
 
@@ -1618,12 +1926,50 @@
     if (S.river.sparkles) {
       S.river.sparkles.material.opacity = 0.55 + Math.sin(elapsed * 3) * 0.2;
     }
+    if (S.river.lilyPads) {
+      S.river.lilyPads.forEach((p) => {
+        p.position.y = 0.05 + Math.sin(elapsed * 1.1 + p.userData.bobPhase) * 0.015;
+      });
+    }
+    if (S.river.fireflySwarms) {
+      updateFireflies(elapsed);
+    }
 
     const reachedEnd = S.boat.group.position.z <= -CONFIG.riverLength + 10;
     const timeUp = now() - S.phaseStartedAt >= CONFIG.riverDuration;
     if (reachedEnd || timeUp) {
       startWaterfallArrival();
     }
+  }
+
+  function updateFireflies(elapsed) {
+    S.river.fireflySwarms.forEach((swarm) => {
+      const t = ((elapsed - swarm.delay) % swarm.cycle + swarm.cycle) % swarm.cycle;
+      if (t > swarm.duration) {
+        swarm.mesh.visible = false;
+        return;
+      }
+      const progress = t / swarm.duration;
+      swarm.mesh.visible = true;
+      const startX = -(CONFIG.riverWidth / 2 + 2);
+      const endX = CONFIG.riverWidth / 2 + 16;
+      const startZ = 4;
+      const endZ = -CONFIG.riverLength * 0.85;
+      swarm.mesh.position.x = startX + (endX - startX) * progress;
+      swarm.mesh.position.z = startZ + (endZ - startZ) * progress;
+      swarm.mesh.position.y = 1.6 + Math.sin(elapsed * 1.6 + swarm.mesh.userData.seed) * 0.3;
+      const fadeIn = Math.min(1, progress / 0.12);
+      const fadeOut = Math.min(1, (1 - progress) / 0.15);
+      swarm.mesh.material.opacity = 0.85 * fadeIn * fadeOut;
+      const posAttr = swarm.mesh.geometry.attributes.position;
+      const base = swarm.mesh.userData.basePositions;
+      for (let i = 0; i < posAttr.count; i += 1) {
+        posAttr.setX(i, base[i * 3] + Math.sin(elapsed * 2 + i) * 0.12);
+        posAttr.setY(i, base[i * 3 + 1] + Math.cos(elapsed * 2.4 + i) * 0.1);
+        posAttr.setZ(i, base[i * 3 + 2] + Math.sin(elapsed * 1.7 + i) * 0.12);
+      }
+      posAttr.needsUpdate = true;
+    });
   }
 
   async function startWaterfallArrival() {
