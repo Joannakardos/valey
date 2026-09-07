@@ -1062,11 +1062,20 @@
     // et pas juste d'avoir des arbres "posés à côté" de la rivière.
     // ------------------------------------------------------------
     const willowCount = Math.floor(CONFIG.riverLength / 6);
+    const catWillowIndex = 3 + Math.floor(Math.random() * (willowCount - 6));
     for (let i = 0; i < willowCount; i += 1) {
       const z = 6 - i * 6 + (Math.random() - 0.5) * 1.5;
       [-1, 1].forEach((side) => {
         const x = side * (CONFIG.riverWidth / 2 + 1.4 + Math.random() * 0.8);
-        group.add(buildWillow(x, z));
+        const willow = buildWillow(x, z);
+        if (i === catWillowIndex && side === 1) {
+          const cat = buildTreeCat();
+          cat.position.set(-0.55, 2.0, 0.3);
+          cat.rotation.y = Math.random() * Math.PI * 2;
+          willow.add(cat);
+          S.river.treeCat = cat;
+        }
+        group.add(willow);
       });
     }
 
@@ -1080,7 +1089,7 @@
       { depth: 3.2, count: willowCount, scale: 0.85, lightStyle: "lantern" },
       { depth: 5.5, count: Math.round(willowCount * 1.3), scale: 0.75, lightStyle: "lantern" },
       { depth: 8.5, count: Math.round(willowCount * 1.6), scale: 0.65, lightStyle: "lantern" },
-      { depth: 12.5, count: Math.round(willowCount * 2), scale: 0.55, lightStyle: "glow" }
+      { depth: 12.5, count: Math.round(willowCount * 1.4), scale: 0.55, lightStyle: "glow" }
     ];
     // On garde un tout petit nombre de vraies lumières dans la forêt (max 6
     // au total, uniquement sur la rangée la plus proche) pour un peu de
@@ -1102,6 +1111,23 @@
         });
       }
     });
+
+    // Rideau de bambous ponctuel le long des deux rives, entre les saules
+    // et les rangées d'arrière-plan : ça casse la vue directe sur le fond
+    // de la forêt (comme sur la photo de référence) et allège un peu la
+    // scène puisque ces bosquets masquent une partie de ce qu'il y a derrière.
+    const bambooScreenSpacing = 9;
+    const bambooScreenCount = Math.floor(CONFIG.riverLength / bambooScreenSpacing);
+    S.river.bambooScreens = [];
+    for (let i = 0; i < bambooScreenCount; i += 1) {
+      if (Math.random() > 0.6) continue; // pas systématique, pour rester naturel
+      const z = 4 - i * bambooScreenSpacing + (Math.random() - 0.5) * 2;
+      const side = Math.random() > 0.5 ? -1 : 1;
+      const x = side * (CONFIG.riverWidth / 2 + 2.6 + Math.random() * 1.2);
+      const cluster = buildBambooCluster(x, z, 3 + Math.floor(Math.random() * 3));
+      group.add(cluster);
+      S.river.bambooScreens.push(cluster);
+    }
 
     // Poissons rouges et noirs, bien visibles sous une eau moins opaque
     S.river.fish = [];
@@ -1138,6 +1164,11 @@
       group.add(mesh);
       return { mesh, delay: i * 9, duration: 13, cycle: 27 };
     });
+
+    // Requin qui traverse ponctuellement, juste sous le bateau. Invisible
+    // au départ, déclenché de temps en temps par updateRiverRide.
+    S.river.shark = { mesh: buildShark(), active: false, nextTriggerAt: 6 + Math.random() * 6 };
+    group.add(S.river.shark.mesh);
 
     // ------------------------------------------------------------
     // CLAIRIÈRE-LAC : la rivière ne s'arrête plus "dans le vide", elle
@@ -1250,6 +1281,38 @@
       group.add(buoy);
       S.river.lakeBuoys.push(buoy);
     }
+
+    // Famille de canards (mère + canetons) qui pagaie en boucle sur le lac
+    const duckFamily = buildDuckFamily();
+    duckFamily.userData.orbitRadius = lakeRadius * 0.5;
+    duckFamily.userData.orbitPhase = Math.random() * Math.PI * 2;
+    group.add(duckFamily);
+    S.river.duckFamily = duckFamily;
+
+    // Petites tortues qui flottent paresseusement entre les nénuphars
+    S.river.turtles = [];
+    for (let i = 0; i < 3; i += 1) {
+      const turtle = buildTurtle();
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * (lakeRadius - 1);
+      turtle.position.set(Math.cos(a) * r, 0.06, lakeCenterZ + Math.sin(a) * r);
+      turtle.userData.bobPhase = Math.random() * Math.PI * 2;
+      group.add(turtle);
+      S.river.turtles.push(turtle);
+    }
+
+    // Un couple de canetons de plus qui traversent carrément la rivière à un
+    // endroit du trajet (pas seulement sur le lac), pour une petite surprise
+    // en pleine traversée.
+    const crossingDuck = buildDuckFamily();
+    crossingDuck.scale.setScalar(0.85);
+    group.add(crossingDuck);
+    S.river.crossingDuck = {
+      mesh: crossingDuck,
+      z: -CONFIG.riverLength * (0.35 + Math.random() * 0.2),
+      active: false,
+      nextTriggerAt: 10 + Math.random() * 8
+    };
 
     // Légère brume au ras de l'eau, tout autour du bassin
     const mistGeo = new THREE.SphereGeometry(0.4, 6, 6);
@@ -1509,6 +1572,138 @@
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), mat);
     mesh.rotation.x = -Math.PI / 2;
     return mesh;
+  }
+
+  // ------------------------------------------------------------
+  // Requin (façon "requin-citron" bleuté) qui passe de temps en temps
+  // juste sous le bateau, plus vite que nous mais assez lentement pour
+  // qu'on ait le temps de le voir. Reste invisible le reste du temps
+  // (geste ponctuel, pas un objet permanent dans la scène).
+  // ------------------------------------------------------------
+  function sharkTexture() {
+    return pixelTexture("sharkSkin", 16, (ctx, size) => {
+      ctx.fillStyle = "#2d5a78";
+      ctx.fillRect(0, 0, size, 10);
+      ctx.fillStyle = "#e8eef2";
+      ctx.fillRect(0, 10, size, 6);
+      ctx.fillStyle = "#22475f";
+      for (let x = 0; x < size; x += 4) ctx.fillRect(x, 2, 2, 1);
+    });
+  }
+
+  function buildShark() {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const skin = new THREE.MeshLambertMaterial({ map: sharkTexture() });
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.5, 2.4, 6), skin);
+    body.rotation.x = Math.PI / 2;
+    body.rotation.y = Math.PI / 6;
+    group.add(body);
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.7, 4), skin);
+    tail.position.z = 1.35;
+    tail.rotation.x = -Math.PI / 2;
+    group.add(tail);
+    const finMat = new THREE.MeshLambertMaterial({ color: 0x1c3a4e });
+    const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 4), finMat);
+    dorsal.position.set(0, 0.42, -0.1);
+    group.add(dorsal);
+    group.userData.dorsal = dorsal;
+    group.visible = false;
+    return group;
+  }
+
+  // ------------------------------------------------------------
+  // Famille de canards (mère + canetons) qui pagaie en boucle sur le
+  // lac : mouvement circulaire tout simple, pas cher, mais qui donne
+  // vraiment l'impression que le lac est habité.
+  // ------------------------------------------------------------
+  function buildDuck(scale) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.16, 0.32),
+      new THREE.MeshLambertMaterial({ color: 0xf4ecd8 })
+    );
+    body.position.y = 0.1;
+    group.add(body);
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.13, 0.14),
+      new THREE.MeshLambertMaterial({ color: 0x2f6b3a })
+    );
+    head.position.set(0, 0.2, -0.17);
+    group.add(head);
+    const beak = new THREE.Mesh(
+      new THREE.BoxGeometry(0.09, 0.05, 0.08),
+      new THREE.MeshLambertMaterial({ color: 0xe0a52e })
+    );
+    beak.position.set(0, 0.19, -0.25);
+    group.add(beak);
+    group.scale.setScalar(scale);
+    return group;
+  }
+
+  function buildDuckFamily() {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const mother = buildDuck(1);
+    group.add(mother);
+    const ducklings = [];
+    for (let i = 0; i < 3; i += 1) {
+      const duckling = buildDuck(0.55);
+      duckling.userData.trailOffset = 0.45 + i * 0.32;
+      group.add(duckling);
+      ducklings.push(duckling);
+    }
+    group.userData.ducklings = ducklings;
+    return group;
+  }
+
+  // ------------------------------------------------------------
+  // Petite tortue qui flotte paresseusement près des nénuphars.
+  // ------------------------------------------------------------
+  function buildTurtle() {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 8, 6),
+      new THREE.MeshLambertMaterial({ color: 0x3c6b3a })
+    );
+    shell.scale.set(1, 0.55, 1.2);
+    group.add(shell);
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.08, 0.1),
+      new THREE.MeshLambertMaterial({ color: 0x5a8a4a })
+    );
+    head.position.set(0, 0.02, -0.24);
+    group.add(head);
+    return group;
+  }
+
+  // ------------------------------------------------------------
+  // Petit chat perché sur une branche, easter egg discret sur UN des
+  // saules du trajet (pas partout, pour rester une surprise).
+  // ------------------------------------------------------------
+  function buildTreeCat() {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const furColor = Math.random() > 0.5 ? 0xd98f3c : 0x2b2622;
+    const fur = new THREE.MeshLambertMaterial({ color: furColor });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.26), fur);
+    group.add(body);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.14, 0.14), fur);
+    head.position.set(0, 0.06, -0.16);
+    group.add(head);
+    [-1, 1].forEach((side) => {
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.08, 4), fur);
+      ear.position.set(side * 0.05, 0.15, -0.18);
+      group.add(ear);
+    });
+    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.02, 0.3, 5), fur);
+    tail.position.set(0, 0.05, 0.16);
+    tail.rotation.x = 0.9;
+    group.add(tail);
+    group.userData.tail = tail;
+    return group;
   }
 
   function buildBoat() {
@@ -2315,12 +2510,37 @@
     if (S.river.petals) {
       updatePetals(delta, elapsed);
     }
+    if (S.river.bambooScreens) {
+      S.river.bambooScreens.forEach((b) => {
+        b.rotation.z = Math.sin(elapsed * 0.6 + b.userData.swayPhase) * 0.02;
+      });
+    }
+    if (S.river.turtles) {
+      S.river.turtles.forEach((t) => {
+        t.position.y = 0.06 + Math.sin(elapsed * 0.7 + t.userData.bobPhase) * 0.02;
+      });
+    }
+    if (S.river.duckFamily) {
+      updateDuckOrbit(S.river.duckFamily, elapsed);
+    }
+    if (S.river.crossingDuck) {
+      updateCrossingDuck(elapsed);
+    }
+    if (S.river.shark) {
+      updateShark(elapsed);
+    }
+    if (S.river.treeCat && S.river.treeCat.userData.tail) {
+      S.river.treeCat.userData.tail.rotation.y = Math.sin(elapsed * 2.2) * 0.4;
+    }
 
     // On considère qu'on est "arrivé" quand le bateau a bien ralenti et
     // dérive tout près du centre du lac (avec la limite de temps en
     // filet de sécurité, au cas où).
     const nearLakeCenter = distToLake <= 4;
-    const timeUp = now() - S.phaseStartedAt >= CONFIG.riverDuration + 6;
+    // Filet de sécurité très large (pas un vrai minutage) : ne doit servir
+    // qu'en cas de blocage anormal, jamais couper la scène avant qu'on ait
+    // eu le temps d'arriver naturellement au lac.
+    const timeUp = now() - S.phaseStartedAt >= CONFIG.riverDuration * 2.5;
     if (nearLakeCenter || timeUp) {
       startLakeArrival();
     }
@@ -2345,6 +2565,80 @@
       pos.setY(i, y);
     }
     pos.needsUpdate = true;
+  }
+
+  // Famille de canards qui pagaie en boucle tranquillement sur le lac
+  function updateDuckOrbit(family, elapsed) {
+    const radius = family.userData.orbitRadius;
+    const angle = elapsed * 0.15 + family.userData.orbitPhase;
+    const cx = Math.cos(angle) * radius;
+    const cz = S.river.lakeCenterZ + Math.sin(angle) * radius;
+    family.position.set(cx, 0.05 + Math.sin(elapsed * 2.4) * 0.012, cz);
+    family.rotation.y = -angle - Math.PI / 2;
+    family.userData.ducklings.forEach((d, i) => {
+      d.position.set(Math.sin(elapsed * 3 + i) * 0.06, 0, d.userData.trailOffset);
+    });
+  }
+
+  // Petite famille de canards qui traverse carrément la rivière à un
+  // moment donné du trajet, en boucle espacée (comme le requin).
+  function updateCrossingDuck(elapsed) {
+    const c = S.river.crossingDuck;
+    if (!c.active) {
+      if (elapsed >= c.nextTriggerAt) {
+        c.active = true;
+        c.startTime = elapsed;
+        c.duration = 3.2 + Math.random() * 1.4;
+        c.fromSide = Math.random() > 0.5 ? 1 : -1;
+        c.mesh.visible = true;
+      }
+      return;
+    }
+    const t = (elapsed - c.startTime) / c.duration;
+    if (t >= 1) {
+      c.active = false;
+      c.mesh.visible = false;
+      c.nextTriggerAt = elapsed + 24 + Math.random() * 16;
+      return;
+    }
+    const startX = c.fromSide * (CONFIG.riverWidth / 2 + 2);
+    const endX = -c.fromSide * (CONFIG.riverWidth / 2 + 2);
+    c.mesh.position.set(startX + (endX - startX) * t, 0.05, c.z);
+    c.mesh.userData.ducklings.forEach((d, i) => {
+      d.position.set(0, 0, d.userData.trailOffset * (c.fromSide > 0 ? -1 : 1));
+    });
+  }
+
+  // Requin qui traverse ponctuellement sous le bateau : invisible la
+  // plupart du temps, apparaît toutes les ~20-30s, plus vite que nous
+  // mais assez lentement pour qu'on ait le temps de le voir passer.
+  function updateShark(elapsed) {
+    const s = S.river.shark;
+    if (!s.active) {
+      if (elapsed >= s.nextTriggerAt && S.boat) {
+        s.active = true;
+        s.startTime = elapsed;
+        s.duration = 2.4 + Math.random() * 0.8;
+        s.fromSide = Math.random() > 0.5 ? 1 : -1;
+        s.z = S.boat.group.position.z - (5 + Math.random() * 6);
+        s.mesh.visible = true;
+      }
+      return;
+    }
+    const t = (elapsed - s.startTime) / s.duration;
+    if (t >= 1) {
+      s.active = false;
+      s.mesh.visible = false;
+      s.nextTriggerAt = elapsed + 20 + Math.random() * 16;
+      return;
+    }
+    const startX = s.fromSide * (CONFIG.riverWidth / 2 + 3);
+    const endX = -s.fromSide * (CONFIG.riverWidth / 2 + 3);
+    s.mesh.position.set(startX + (endX - startX) * t, -0.06, s.z);
+    s.mesh.rotation.y = s.fromSide > 0 ? Math.PI : 0;
+    if (s.mesh.userData.dorsal) {
+      s.mesh.userData.dorsal.position.y = 0.4 + Math.sin(elapsed * 8) * 0.03;
+    }
   }
 
   function updateFireflies(elapsed) {
