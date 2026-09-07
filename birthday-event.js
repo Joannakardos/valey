@@ -35,6 +35,13 @@
     //   return target;
     // },
     finalText: "Joyeux anniversaire de nos 20 mois mon amour",
+    // Tu peux ajouter, enlever ou modifier les petites phrases ici.
+    riverMessages: [
+      "Oui je sais, je suis en retard…",
+      "Mais je voulais quand même t'offrir ton petit cadeau hehehe.",
+      "Bref, je te laisse découvrir.",
+      "Je t'aimmmmmmmmmme — MWWWWWWWWWAaaaaaaaaaH, MWAHHH, MWAHHH !"
+    ],
     riverDuration: 34, // secondes, entre 30 et 40 comme demandé
     riverLength: 150,
     riverWidth: 7.2,
@@ -75,7 +82,8 @@
     river: { willows: [], fish: [], waterMesh: null, lakeMesh: null, mist: [] },
     snow: { group: null, auroraMaterials: [], snowflakes: null, textSprite: null },
     timers: [],
-    phaseStartedAt: 0
+    phaseStartedAt: 0,
+    riverMessageTimer: null
   };
 
   function now() {
@@ -108,6 +116,14 @@
         pointer-events: none; display: none; }
       #bdayHint.show { display: block; }
       #bdaySkyText { position: fixed; inset: 0; display: none; place-items: center; pointer-events: none; z-index: 40; }
+      #bdayRiverMessage { position: fixed; left: 50%; top: 50%; z-index: 91; width: min(60vw, 420px);
+        transform: translate(-50%, -50%) translateY(8px); box-sizing: border-box; padding: 9px 13px;
+        border: 1px solid rgba(255, 215, 139, 0.25); border-radius: 14px; background: rgba(12, 9, 19, 0.32);
+        backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); color: #ffdda0; font-size: clamp(0.72rem, 1.6vw, 0.98rem);
+        line-height: 1.45; letter-spacing: 0.025em; text-align: center; text-shadow: 0 0 16px rgba(255, 183, 77, 0.85), 0 1px 3px #000;
+        opacity: 0; visibility: hidden; transition: opacity 500ms ease, transform 500ms ease, visibility 500ms; }
+      #bdayRiverMessage.show { opacity: 1; visibility: visible; transform: translate(-50%, -50%); }
+      @media (max-width: 600px) { #bdayRiverMessage { width: min(76vw, 360px); padding: 8px 11px; line-height: 1.42; } }
     `;
     document.head.appendChild(style);
   }
@@ -122,6 +138,7 @@
       <div id="bdayFadeWhite"></div>
       <div id="bdayLookLayer"></div>
       <div id="bdayHint">Glisser pour regarder autour de vous</div>
+      <div id="bdayRiverMessage" aria-live="polite"></div>
     `;
     document.body.appendChild(root);
     S.dom = {
@@ -131,8 +148,43 @@
       fadeBlack: root.querySelector("#bdayFadeBlack"),
       fadeWhite: root.querySelector("#bdayFadeWhite"),
       lookLayer: root.querySelector("#bdayLookLayer"),
-      hint: root.querySelector("#bdayHint")
+      hint: root.querySelector("#bdayHint"),
+      riverMessage: root.querySelector("#bdayRiverMessage")
     };
+  }
+
+  function startRiverMessage() {
+    const message = S.dom.riverMessage;
+    if (!message) return;
+    if (S.riverMessageTimer) clearTimeout(S.riverMessageTimer);
+    message.textContent = "";
+    let phraseIndex = 0;
+
+    const showNextPhrase = () => {
+      if (phraseIndex >= CONFIG.riverMessages.length) {
+        S.riverMessageTimer = null;
+        return;
+      }
+      message.textContent = CONFIG.riverMessages[phraseIndex];
+      message.classList.add("show");
+      S.riverMessageTimer = setTimeout(() => {
+        message.classList.remove("show");
+        S.riverMessageTimer = setTimeout(() => {
+          phraseIndex += 1;
+          showNextPhrase();
+        }, 650);
+      }, 4000);
+    };
+
+    // Le premier mot arrive après le réveil ; les quatre phrases se terminent
+    // assez tôt pour laisser la vue totalement libre avant le lac.
+    S.riverMessageTimer = setTimeout(showNextPhrase, 1300);
+  }
+
+  function hideRiverMessage() {
+    if (S.riverMessageTimer) clearTimeout(S.riverMessageTimer);
+    S.riverMessageTimer = null;
+    if (S.dom.riverMessage) S.dom.riverMessage.classList.remove("show");
   }
 
   function hideBaseUi(hidden) {
@@ -448,6 +500,7 @@
     S.phaseStartedAt = now();
     S.dom.lookLayer.classList.add("active");
     S.dom.hint.classList.add("show");
+    startRiverMessage();
     startAmbientLoop("river", { root: 220, scale: [0, 3, 5, 7, 10, 12, 15] });
   }
 
@@ -463,6 +516,7 @@
       S.phaseStartedAt = now();
       S.dom.lookLayer.classList.add("active");
       S.dom.hint.classList.add("show");
+      startRiverMessage();
       startAmbientLoop("river", { root: 220, scale: [0, 3, 5, 7, 10, 12, 15] });
     } else if (FORCE_PHASE === "lake") {
       // Raccourci de test : place directement le bateau à l'arrêt sur le
@@ -474,6 +528,7 @@
       S.phaseStartedAt = now();
       S.dom.lookLayer.classList.add("active");
       S.dom.hint.classList.add("show");
+      startRiverMessage();
       startAmbientLoop("river", { root: 220, scale: [0, 3, 5, 7, 10, 12, 15] });
     } else if (FORCE_PHASE === "snow") {
       buildSnowScene();
@@ -2674,6 +2729,7 @@
   async function startLakeArrival() {
     if (S.phase !== PHASE.RIVER_RIDE) return;
     S.phase = PHASE.LAKE_ARRIVAL;
+    hideRiverMessage();
     playWaterSplash();
     // On laisse le bateau flotter tranquillement sur le lac, avec toujours
     // la possibilité de regarder autour de soi (bambous, lanternes, lotus),
