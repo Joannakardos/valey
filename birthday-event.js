@@ -46,7 +46,7 @@
     riverLength: 150,
     riverWidth: 7.2,
     lakeRadius: 9, // rayon du petit lac à l'arrivée de la rivière
-    lakeLingerDuration: 3.2, // secondes passées à regarder autour avant le fondu blanc
+    lakeLingerDuration: 9, // secondes de flottaison sur le lac avant le fondu blanc
     lockEntireSite: true, // true = le site s'ouvre directement sur le compte à rebours
     snowSceneMinDuration: 9 // secondes avant l'apparition du texte final
   };
@@ -977,6 +977,123 @@
   }
 
   // ------------------------------------------------------------
+  // Textures pixel-art pour la scène hiver — même technique que la
+  // rivière (canvas + NearestFilter), pour que la neige/glace/roche/
+  // sapins aient un vrai rendu "bloc Minecraft" au lieu de surfaces lisses.
+  // ------------------------------------------------------------
+  function snowTexture() {
+    const { THREE } = S.ctx;
+    const tex = pixelTexture("snowGround", 16, (ctx, size) => {
+      const cell = size / 8;
+      const shades = ["#f7fbff", "#eef5ff", "#e4eefc", "#f2f8ff", "#dbe8fb"];
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          ctx.fillStyle = shades[(x * 5 + y * 3) % shades.length];
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(40, 40);
+    return tex;
+  }
+
+  function iceTexture() {
+    return pixelTexture("iceBlock", 16, (ctx, size) => {
+      const cell = size / 8;
+      const shades = ["#123a5c", "#164a70", "#0e2d47", "#1a5480"];
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          ctx.fillStyle = shades[(x * 5 + y * 3) % shades.length];
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.fillRect(1, 1, 2, 2);
+      ctx.fillRect(9, 5, 2, 2);
+      ctx.fillRect(5, 11, 2, 2);
+    });
+  }
+
+  function mountainRockTexture() {
+    return pixelTexture("mountainRock", 16, (ctx, size) => {
+      const cell = size / 8;
+      const shades = ["#3c4666", "#454f70", "#333c58", "#4a5478", "#2c3450"];
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          ctx.fillStyle = shades[(x * 3 + y * 7) % shades.length];
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+  }
+
+  function mountainSnowTexture() {
+    return pixelTexture("mountainSnow", 16, (ctx, size) => {
+      const cell = size / 8;
+      const shades = ["#ffffff", "#f5f9ff", "#eaf2ff", "#f9fcff"];
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          ctx.fillStyle = shades[(x * 5 + y * 3) % shades.length];
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+  }
+
+  function pineTexture(variant) {
+    return pixelTexture(`pine${variant}`, 16, (ctx, size) => {
+      const greens = [["#1c3a22", "#24522c"], ["#193420", "#2c5c34"]];
+      const [dark, light] = greens[variant % greens.length];
+      const cell = size / 8;
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          ctx.fillStyle = (x + y) % 2 === 0 ? dark : light;
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+  }
+
+  function moonTexture() {
+    return pixelTexture("moonBlocky", 32, (ctx, size) => {
+      const cell = size / 16;
+      const shades = ["#f3f6ff", "#e8edfb", "#dfe6f7", "#eef1fb", "#d7dff2"];
+      for (let y = 0; y < 16; y += 1) {
+        for (let x = 0; x < 16; x += 1) {
+          const dx = x - 7.5;
+          const dy = y - 7.5;
+          if (Math.sqrt(dx * dx + dy * dy) > 7.5) continue;
+          ctx.fillStyle = shades[(x * 3 + y * 5) % shades.length];
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+      ctx.fillStyle = "#c7d0ea";
+      [[4, 5], [10, 4], [8, 9], [5, 11]].forEach(([x, y]) => {
+        ctx.fillRect(x * cell, y * cell, cell * 1.5, cell * 1.5);
+      });
+    });
+  }
+
+  // Petite congère voxel : amas de blocs plats et légèrement décalés,
+  // pour remplacer les tas de neige en sphère lisse.
+  function buildSnowMound(width, depth, height) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf3f8ff });
+    const blockCount = 5;
+    for (let i = 0; i < blockCount; i += 1) {
+      const w = width * (0.5 + Math.random() * 0.5);
+      const d = depth * (0.5 + Math.random() * 0.5);
+      const h = height * (0.6 + Math.random() * 0.6);
+      const block = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), snowMat);
+      block.position.set((Math.random() - 0.5) * width * 0.5, h / 2, (Math.random() - 0.5) * depth * 0.5);
+      group.add(block);
+    }
+    return group;
+  }
+
+  // ------------------------------------------------------------
   // Sabre voxel (katana) posé sur un petit présentoir en bois —
   // décor façon jardin japonais, planté le long des berges à
   // quelques endroits choisis.
@@ -1861,17 +1978,21 @@
     scene.background = new THREE.Color(0x0a1330);
     scene.fog = new THREE.FogExp2(0x0e1c3a, 0.014);
 
-    // Sol enneigé, légèrement vallonné
-    const groundGeo = new THREE.PlaneGeometry(260, 260, 70, 70);
+    // Sol enneigé "par paliers", façon terrain Minecraft : la hauteur est
+    // quantifiée par marches et le matériau est en flatShading avec une
+    // texture pixel, pour que chaque facette du terrain se voie clairement
+    // au lieu d'un vallonnement lisse.
+    const groundGeo = new THREE.PlaneGeometry(260, 260, 52, 52);
     const posAttr = groundGeo.attributes.position;
+    const GROUND_STEP = 0.55;
     for (let i = 0; i < posAttr.count; i += 1) {
       const x = posAttr.getX(i);
       const y = posAttr.getY(i);
-      const h = Math.sin(x * 0.05) * 0.6 + Math.cos(y * 0.04) * 0.5 + Math.sin((x + y) * 0.02) * 0.8;
-      posAttr.setZ(i, h);
+      const raw = Math.sin(x * 0.05) * 0.6 + Math.cos(y * 0.04) * 0.5 + Math.sin((x + y) * 0.02) * 0.8;
+      posAttr.setZ(i, Math.round(raw / GROUND_STEP) * GROUND_STEP);
     }
     groundGeo.computeVertexNormals();
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0xeaf3ff, roughness: 0.85, metalness: 0.0 });
+    const groundMat = new THREE.MeshLambertMaterial({ map: snowTexture(), flatShading: true });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     group.add(ground);
@@ -1883,6 +2004,8 @@
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
       if (x > -7 && x < 1 && z < 3 && z > -44) continue;
+      if (Math.hypot(x - VILLAGE.x, z - VILLAGE.z) < VILLAGE.radius + 4) continue;
+      if (Math.hypot(x - PARK.x, z - PARK.z) < PARK.radius + 4) continue;
       group.add(buildSnowyPine(x, z, 1 + Math.random() * 1.4));
     }
 
@@ -1921,11 +2044,20 @@
       S.snow.reindeer.push(deer);
     });
 
-    // Lumière : lune froide + halo d'aurore
-    const moon = new THREE.Mesh(
-      new THREE.SphereGeometry(3, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xf3f6ff })
-    );
+    // Petit village de Noël façon marché alsacien/bavarois, en voxel,
+    // posé à l'écart du chalet/de l'attelage pour ne rien superposer.
+    buildChristmasVillage(group);
+
+    // Grand parc d'attractions de Noël façon "Disney" (grande roue, carrousel,
+    // petit train, patinoire, atelier du Père Noël, maisons en pain d'épices,
+    // soldats de plomb, allée de sucres d'orge), toujours en voxel.
+    buildAmusementPark(group);
+
+    // Lumière : lune froide (sprite pixel-art façon bloc lumineux, plutôt
+    // qu'une sphère lisse) + halo d'aurore
+    const moonMat = new THREE.SpriteMaterial({ map: moonTexture(), transparent: true });
+    const moon = new THREE.Sprite(moonMat);
+    moon.scale.set(9, 9, 1);
     moon.position.set(-30, 40, -50);
     group.add(moon);
     group.add(new THREE.PointLight(0xdfe8ff, 0.6, 200));
@@ -1982,19 +2114,46 @@
     group.add(flakes);
     S.snow.snowflakes = flakes;
 
-    // Caméra posée dans la clairière, face au chalet et à l'attelage
-    S.ctx.camera.position.set(0, 1.7, 6);
-    S.look.yaw = -0.35;
-    S.look.pitch = 0.1;
+    // Caméra en hauteur, au centre de la carte, pour voir d'un coup d'œil
+    // le chalet, le canal, l'attelage et le village au réveil.
+    S.ctx.camera.position.set(6, 30, -19);
+    S.look.yaw = 0;
+    S.look.pitch = -0.6;
   }
 
   // ------------------------------------------------------------
   // Montagnes enneigées à l'horizon, tout autour de la clairière
   // ------------------------------------------------------------
-  function buildMountainRange(group) {
+  // Montagne voxel : pyramide de blocs qui rétrécissent en hauteur (roche
+  // texturée en bas, neige texturée sur le tiers supérieur), façon relief
+  // Minecraft, à la place des cônes lisses d'origine.
+  function buildVoxelMountain(x, z, height, baseSize) {
     const { THREE } = S.ctx;
-    const rockMat = new THREE.MeshLambertMaterial({ color: 0x3c4666 });
-    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf5f9ff });
+    const rockMat = new THREE.MeshLambertMaterial({ map: mountainRockTexture(), flatShading: true });
+    const snowMat = new THREE.MeshLambertMaterial({ map: mountainSnowTexture(), flatShading: true });
+    const group = new THREE.Group();
+    const tiers = 5 + Math.floor(Math.random() * 3);
+    let y = 0;
+    for (let i = 0; i < tiers; i += 1) {
+      const t = i / (tiers - 1);
+      const size = baseSize * (1 - t * 0.82);
+      const tierH = height / tiers;
+      const jitterX = (Math.random() - 0.5) * baseSize * 0.15;
+      const jitterZ = (Math.random() - 0.5) * baseSize * 0.15;
+      const block = new THREE.Mesh(
+        new THREE.BoxGeometry(size, tierH, size),
+        t > 0.62 ? snowMat : rockMat
+      );
+      block.position.set(jitterX, y + tierH / 2, jitterZ);
+      block.rotation.y = Math.random() * 0.3;
+      group.add(block);
+      y += tierH * 0.92;
+    }
+    group.position.set(x, -2, z);
+    return group;
+  }
+
+  function buildMountainRange(group) {
     const count = 30;
     for (let i = 0; i < count; i += 1) {
       const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.12;
@@ -2003,16 +2162,7 @@
       const base = 10 + Math.random() * 8;
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
-
-      const peak = new THREE.Mesh(new THREE.ConeGeometry(base, height, 6), rockMat);
-      peak.position.set(x, height / 2 - 2, z);
-      peak.rotation.y = Math.random() * Math.PI;
-      group.add(peak);
-
-      const cap = new THREE.Mesh(new THREE.ConeGeometry(base * 0.55, height * 0.4, 6), snowMat);
-      cap.position.set(x, height * 0.8 - 2, z);
-      cap.rotation.y = peak.rotation.y;
-      group.add(cap);
+      group.add(buildVoxelMountain(x, z, height, base));
     }
   }
 
@@ -2027,9 +2177,9 @@
     const canalLength = 42;
     const canalZStart = 1;
 
-    // Glace sombre et brillante, légèrement réfléchissante
+    // Glace sombre et brillante, légèrement réfléchissante, texture pixel
     const iceMat = new THREE.MeshStandardMaterial({
-      color: 0x16233f, roughness: 0.12, metalness: 0.55, transparent: true, opacity: 0.92
+      map: iceTexture(), roughness: 0.12, metalness: 0.55, transparent: true, opacity: 0.92
     });
     const ice = new THREE.Mesh(new THREE.PlaneGeometry(6.4, canalLength), iceMat);
     ice.rotation.x = -Math.PI / 2;
@@ -2091,10 +2241,8 @@
     cap.position.set(0.5, 1.64, 0);
     group.add(cap);
 
-    // Petite congère de neige au pied du poteau
-    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf3f8ff });
-    const drift = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 5), snowMat);
-    drift.scale.set(1, 0.25, 1);
+    // Petite congère de neige voxel au pied du poteau
+    const drift = buildSnowMound(1, 1, 0.22);
     group.add(drift);
 
     if (withLight) {
@@ -2199,10 +2347,8 @@
     windowLight.position.set(1.2, 2, 3.4);
     group.add(windowLight);
 
-    // Congère de neige au pied des murs
-    const snowdrift = new THREE.Mesh(new THREE.SphereGeometry(3.4, 10, 6), snowMat);
-    snowdrift.scale.set(1.35, 0.22, 1.2);
-    snowdrift.position.y = 0.05;
+    // Congère de neige voxel au pied des murs
+    const snowdrift = buildSnowMound(7, 6, 0.5);
     group.add(snowdrift);
 
     // Petit sapin décoré à côté de la porte
@@ -2376,33 +2522,1563 @@
     return group;
   }
 
+  // Sapin enneigé 100% voxel : tronc en bloc + étages de blocs qui
+  // rétrécissent façon "sapin Minecraft", chaque étage coiffé d'une fine
+  // couche de neige, au lieu des cônes lisses d'origine.
   function buildSnowyPine(x, z, scale) {
     const { THREE } = S.ctx;
     const group = new THREE.Group();
-    const trunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.15, 0.22, 1.2, 6),
-      new THREE.MeshLambertMaterial({ color: 0x3b2a1c })
-    );
-    trunk.position.y = 0.6;
+    const trunkMat = new THREE.MeshLambertMaterial({ map: barkTexture() });
+    const pineMat = new THREE.MeshLambertMaterial({ map: pineTexture(Math.floor(Math.random() * 2)) });
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf4f8ff });
+
+    const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.1, 0.32), trunkMat);
+    trunk.position.y = 0.55;
     group.add(trunk);
-    const tiers = 3;
+
+    const tiers = 4;
+    let y = 1.1;
     for (let i = 0; i < tiers; i += 1) {
-      const cone = new THREE.Mesh(
-        new THREE.ConeGeometry(1.1 - i * 0.28, 1.5, 8),
-        new THREE.MeshLambertMaterial({ color: 0x24422c })
-      );
-      cone.position.y = 1.4 + i * 1.05;
-      group.add(cone);
-      const snowCap = new THREE.Mesh(
-        new THREE.ConeGeometry(1.1 - i * 0.28 + 0.05, 0.35, 8),
-        new THREE.MeshLambertMaterial({ color: 0xf4f8ff })
-      );
-      snowCap.position.y = 1.4 + i * 1.05 + 0.6;
-      group.add(snowCap);
+      const size = 2.1 - i * 0.42;
+      const tierH = 0.95;
+      const block = new THREE.Mesh(new THREE.BoxGeometry(size, tierH, size), pineMat);
+      block.position.y = y + tierH / 2;
+      group.add(block);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(size + 0.06, 0.12, size + 0.06), snowMat);
+      cap.position.y = y + tierH;
+      group.add(cap);
+      y += tierH * 0.78;
     }
+
     group.position.set(x, 0, z);
     group.scale.setScalar(scale);
     return group;
+  }
+
+  // ------------------------------------------------------------
+  // VILLAGE DE NOËL — petit marché façon Alsace/Bavière (maisons à
+  // colombages, échoppes, fontaine, sapin géant décoré, casse-noisettes,
+  // guirlandes tendues, cloche d'église) transposé en voxel/Minecraft,
+  // posé un peu à l'écart du chalet/de l'attelage de huskies existants.
+  // ------------------------------------------------------------
+  const VILLAGE = { x: 34, z: -20, radius: 17 };
+  const PARK = { x: -34, z: 22, radius: 22 };
+
+  function cobblestoneTexture() {
+    return pixelTexture("cobblestone", 16, (ctx, size) => {
+      const cell = size / 8;
+      const shades = ["#6b6b6b", "#787878", "#5a5a5a", "#828282", "#4f4f4f"];
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          ctx.fillStyle = shades[(x * 5 + y * 7) % shades.length];
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+  }
+
+  // Mosaïque radiante façon "boussole/flocon" au sol de la place, comme
+  // sur les grandes places de marché de Noël féeriques : anneaux de pierre
+  // chaude alternée avec de la pierre bleu nuit, et une étoile dorée à
+  // 8 branches tracée depuis le centre. Dessinée en grille (voxel) plutôt
+  // qu'en dégradé lisse pour rester dans l'esthétique Minecraft.
+  function plazaMosaicTexture() {
+    return pixelTexture("plazaMosaic", 64, (ctx, size) => {
+      const cx = size / 2;
+      const cy = size / 2;
+      const cell = 2;
+      for (let y = 0; y < size; y += cell) {
+        for (let x = 0; x < size; x += cell) {
+          const dx = x + cell / 2 - cx;
+          const dy = y + cell / 2 - cy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > size * 0.5) continue;
+          const angle = Math.atan2(dy, dx);
+          const sector = Math.round(((angle + Math.PI) / (Math.PI * 2)) * 16) % 16;
+          const ring = Math.floor(dist / (size * 0.085));
+          let color;
+          if (ring % 3 === 0) {
+            color = "#16233f";
+          } else if (sector % 2 === 0) {
+            color = "#d9c79a";
+          } else {
+            color = "#c4ac78";
+          }
+          ctx.fillStyle = color;
+          ctx.fillRect(x, y, cell, cell);
+        }
+      }
+      ctx.strokeStyle = "#d9a94a";
+      ctx.lineWidth = 2;
+      for (let r = 0.12; r < 0.5; r += 0.09) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, size * r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "#ffe37a";
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 8; i += 1) {
+        const a = (i / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(a) * size * 0.47, cy + Math.sin(a) * size * 0.47);
+        ctx.stroke();
+      }
+    });
+  }
+
+  // Façade à colombages : fond coloré + cadre et croix de Saint-André en
+  // "poutres" sombres, façon pans de bois alsaciens, en pixel-art voxel.
+  function timberFacadeTexture(baseColor) {
+    return pixelTexture(`timber_${baseColor}`, 16, (ctx, size) => {
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = "#3a2a18";
+      ctx.fillRect(0, 0, size, 2);
+      ctx.fillRect(0, size - 2, size, 2);
+      ctx.fillRect(0, 0, 2, size);
+      ctx.fillRect(size - 2, 0, 2, size);
+      for (let i = 2; i < size - 2; i += 1) {
+        ctx.fillRect(i, i, 1, 1);
+        ctx.fillRect(size - 1 - i, i, 1, 1);
+      }
+    });
+  }
+
+  // Petite couronne de houx (torus vert + noeud rouge), posée sur les
+  // portes des maisons du village.
+  function buildWreath() {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const ringMat = new THREE.MeshLambertMaterial({ color: 0x1f5a2a });
+    const segments = 10;
+    for (let i = 0; i < segments; i += 1) {
+      const angle = (i / segments) * Math.PI * 2;
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.09), ringMat);
+      seg.position.set(Math.cos(angle) * 0.24, Math.sin(angle) * 0.24, 0);
+      group.add(seg);
+    }
+    const bow = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, 0.1, 0.04),
+      new THREE.MeshLambertMaterial({ color: 0xc23a3a })
+    );
+    bow.position.y = -0.26;
+    group.add(bow);
+    return group;
+  }
+
+  // Maison à colombages voxel : façade peinte, toit pentu enneigé,
+  // volets verts, fenêtres chaudes façon bougie LED, couronne sur la porte.
+  function buildHalfTimberedHouse(x, z, rotY, wallColorHex, roofColorHex, scale) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const wallMat = new THREE.MeshLambertMaterial({ map: timberFacadeTexture(wallColorHex) });
+    const roofMat = new THREE.MeshLambertMaterial({ color: roofColorHex });
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf3f8ff });
+    const doorMat = new THREE.MeshLambertMaterial({ color: 0x3a2314 });
+    const shutterMat = new THREE.MeshLambertMaterial({ color: 0x2f6b3a });
+
+    const walls = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.0, 3.4), wallMat);
+    walls.position.y = 1.5;
+    group.add(walls);
+
+    const roofL = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.2, 2.3), roofMat);
+    roofL.position.set(0, 3.1, -0.95);
+    roofL.rotation.x = -0.55;
+    group.add(roofL);
+    const roofR = roofL.clone();
+    roofR.position.z = 0.95;
+    roofR.rotation.x = 0.55;
+    group.add(roofR);
+    const snowL = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.12, 0.9), snowMat);
+    snowL.position.set(0, 3.55, -1.55);
+    snowL.rotation.x = -0.55;
+    group.add(snowL);
+    const snowR = snowL.clone();
+    snowR.position.z = 1.55;
+    snowR.rotation.x = 0.55;
+    group.add(snowR);
+
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.3, 0.08), doorMat);
+    door.position.set(0, 0.65, 1.71);
+    group.add(door);
+    const wreath = buildWreath();
+    wreath.position.set(0, 1.5, 1.73);
+    group.add(wreath);
+
+    [-0.85, 0.85].forEach((wx) => {
+      const win = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.55, 0.55),
+        new THREE.MeshBasicMaterial({ color: 0xffd48a })
+      );
+      win.position.set(wx, 1.75, 1.71);
+      group.add(win);
+      const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(0.66, 0.66, 0.06),
+        new THREE.MeshLambertMaterial({ color: 0x2f1c10 })
+      );
+      frame.position.set(wx, 1.75, 1.68);
+      group.add(frame);
+      [-1, 1].forEach((side) => {
+        const shutter = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.66, 0.04), shutterMat);
+        shutter.position.set(wx + side * 0.38, 1.75, 1.7);
+        group.add(shutter);
+      });
+      const light = new THREE.PointLight(0xffc772, 0.4, 5);
+      light.position.set(wx, 1.75, 2.2);
+      group.add(light);
+    });
+
+    const snowdrift = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.3, 2.4), snowMat);
+    group.add(snowdrift);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    group.scale.setScalar(scale || 1);
+    return group;
+  }
+
+  // Petite église avec clocher, horloge dorée et cloche visible.
+  function buildChurch(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const stoneMat = new THREE.MeshLambertMaterial({ map: stoneTexture() });
+    const roofMat = new THREE.MeshLambertMaterial({ color: 0x2f3a52 });
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf3f8ff });
+
+    const nave = new THREE.Mesh(new THREE.BoxGeometry(4.2, 4.4, 7), stoneMat);
+    nave.position.y = 2.2;
+    group.add(nave);
+    const naveRoofL = new THREE.Mesh(new THREE.BoxGeometry(4.7, 0.2, 5.2), roofMat);
+    naveRoofL.position.set(0, 4.7, -1.4);
+    naveRoofL.rotation.x = -0.6;
+    group.add(naveRoofL);
+    const naveRoofR = naveRoofL.clone();
+    naveRoofR.position.z = 1.4;
+    naveRoofR.rotation.x = 0.6;
+    group.add(naveRoofR);
+
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(2.2, 6.5, 2.2), stoneMat);
+    tower.position.set(0, 3.25, -4.2);
+    group.add(tower);
+
+    // Flèche du clocher voxel : empilement de blocs de plus en plus petits
+    const spireLevels = [[1.9, 0.9], [1.5, 0.9], [1.1, 0.7], [0.7, 0.6], [0.35, 0.5]];
+    let spireY = 6.5;
+    spireLevels.forEach(([size, h]) => {
+      const block = new THREE.Mesh(new THREE.BoxGeometry(size, h, size), roofMat);
+      block.position.set(0, spireY + h / 2, -4.2);
+      group.add(block);
+      spireY += h;
+    });
+    const spireSnow = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.4), snowMat);
+    spireSnow.position.set(0, spireY + 0.15, -4.2);
+    group.add(spireSnow);
+
+    const clockFace = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 0.9, 0.08),
+      new THREE.MeshLambertMaterial({ color: 0xffe37a, emissive: 0xd9a94a, emissiveIntensity: 0.6 })
+    );
+    clockFace.position.set(0, 5.3, -3.12);
+    group.add(clockFace);
+
+    const bell = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.5, 0.5),
+      new THREE.MeshLambertMaterial({ color: 0xc9a24a })
+    );
+    bell.position.set(0, 1.7, -4.2);
+    group.add(bell);
+    group.userData.bell = bell;
+
+    const snowdrift = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.3, 8.2), snowMat);
+    snowdrift.position.y = 0.05;
+    group.add(snowdrift);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
+  }
+
+  // Échoppe de marché de Noël : comptoir + nappe, toit pointu, enseigne
+  // peinte, panier en osier rempli de "fruits/épices", tonneau recyclé.
+  function buildMarketStall(x, z, rotY, roofColorHex, goodsColors) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const woodMat = new THREE.MeshLambertMaterial({ map: barkTexture() });
+    const roofMat = new THREE.MeshLambertMaterial({ color: roofColorHex });
+    const clothMat = new THREE.MeshLambertMaterial({ color: 0xb8302f });
+
+    const counter = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 0.9), woodMat);
+    counter.position.y = 0.45;
+    group.add(counter);
+    const cloth = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.05, 1.0), clothMat);
+    cloth.position.y = 0.92;
+    group.add(cloth);
+
+    const roofA = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.5, 1.8), roofMat);
+    roofA.position.y = 1.75;
+    group.add(roofA);
+    const roofB = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 1.0), roofMat);
+    roofB.position.y = 2.2;
+    group.add(roofB);
+    const roofTop = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), roofMat);
+    roofTop.position.y = 2.6;
+    group.add(roofTop);
+
+    [[-1, -0.4], [1, -0.4], [-1, 0.4], [1, 0.4]].forEach(([px, pz]) => {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.6, 0.12), woodMat);
+      post.position.set(px, 0.8, pz);
+      group.add(post);
+    });
+
+    const sign = new THREE.Mesh(
+      new THREE.BoxGeometry(1.0, 0.35, 0.06),
+      new THREE.MeshLambertMaterial({ color: 0xdcb877 })
+    );
+    sign.position.set(0, 1.65, 0.5);
+    group.add(sign);
+
+    const basketMat = new THREE.MeshLambertMaterial({ color: 0xa9773f });
+    const basket = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.32, 0.4), basketMat);
+    basket.position.set(-0.8, 0.36, 0.7);
+    group.add(basket);
+    goodsColors.forEach((color) => {
+      const good = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, 0.14, 0.14),
+        new THREE.MeshLambertMaterial({ color })
+      );
+      good.position.set(-0.8 + (Math.random() - 0.5) * 0.3, 0.52, 0.7 + (Math.random() - 0.5) * 0.3);
+      group.add(good);
+    });
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.5), woodMat);
+    barrel.position.set(0.9, 0.3, 0.7);
+    group.add(barrel);
+
+    const light = new THREE.PointLight(0xffb35c, 0.5, 6);
+    light.position.set(0, 1.5, 0);
+    group.add(light);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
+  }
+
+  // Fontaine centrale gelée : bassin de pierre, glace scintillante,
+  // colonne et vasque supérieure enneigée.
+  function buildFountain(x, z) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const stoneMat = new THREE.MeshLambertMaterial({ map: stoneTexture() });
+    const iceMat = new THREE.MeshStandardMaterial({
+      map: iceTexture(), roughness: 0.15, metalness: 0.4, transparent: true, opacity: 0.85
+    });
+
+    const basin = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.5, 3.6), stoneMat);
+    basin.position.y = 0.25;
+    group.add(basin);
+    const water = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.08, 3.0), iceMat);
+    water.position.y = 0.52;
+    group.add(water);
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.3, 0.5), stoneMat);
+    pillar.position.y = 1.2;
+    group.add(pillar);
+    const bowl = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.2, 1.1), stoneMat);
+    bowl.position.y = 1.9;
+    group.add(bowl);
+    const spire = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), stoneMat);
+    spire.position.y = 2.25;
+    group.add(spire);
+    const snowCap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 0.14, 0.9),
+      new THREE.MeshLambertMaterial({ color: 0xf3f8ff })
+    );
+    snowCap.position.y = 2.0;
+    group.add(snowCap);
+
+    group.position.set(x, 0, z);
+    return group;
+  }
+
+  // Grand sapin décoré : étages successifs, guirlandes dorées en anneau,
+  // boules de couleurs variées et étoile lumineuse au sommet.
+  function buildGiantChristmasTree(x, z) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const trunk = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 2, 0.7),
+      new THREE.MeshLambertMaterial({ color: 0x3b2a1c })
+    );
+    trunk.position.y = 1;
+    group.add(trunk);
+
+    const tiers = 6;
+    const ornamentColors = [0xc23a3a, 0xd9a94a, 0x3a6fbf, 0xf3f2ee];
+    for (let i = 0; i < tiers; i += 1) {
+      const size = 6.6 - i * 0.95;
+      const cube = new THREE.Mesh(
+        new THREE.BoxGeometry(size, 1.9, size),
+        new THREE.MeshLambertMaterial({ color: 0x1e4526 })
+      );
+      cube.position.y = 2.4 + i * 1.5;
+      group.add(cube);
+
+      // Guirlande dorée : ceinture de petits cubes autour de l'étage
+      const beadCount = 14;
+      for (let b = 0; b < beadCount; b += 1) {
+        const angle = (b / beadCount) * Math.PI * 2;
+        const bead = new THREE.Mesh(
+          new THREE.BoxGeometry(0.1, 0.1, 0.1),
+          new THREE.MeshLambertMaterial({ color: 0xd9a94a, emissive: 0x8a5a1a, emissiveIntensity: 0.5 })
+        );
+        bead.position.set(Math.cos(angle) * size * 0.52, 2.4 + i * 1.5 + 0.3, Math.sin(angle) * size * 0.52);
+        group.add(bead);
+      }
+
+      for (let o = 0; o < 5; o += 1) {
+        const angle = Math.random() * Math.PI * 2;
+        const r = size * (0.3 + Math.random() * 0.2);
+        const color = ornamentColors[o % ornamentColors.length];
+        const ball = new THREE.Mesh(
+          new THREE.BoxGeometry(0.22, 0.22, 0.22),
+          new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.35 })
+        );
+        ball.position.set(Math.cos(angle) * r, 2.4 + i * 1.5 - 0.4, Math.sin(angle) * r);
+        group.add(ball);
+      }
+    }
+
+    // Étoile voxel (croix de blocs) au sommet
+    const starMat = new THREE.MeshLambertMaterial({
+      color: 0xffe37a, emissive: 0xffcf5c, emissiveIntensity: 0.9
+    });
+    const starY = 2.4 + tiers * 1.5 + 0.3;
+    const starCore = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), starMat);
+    starCore.position.y = starY;
+    group.add(starCore);
+    [[0.35, 0, 0], [-0.35, 0, 0], [0, 0, 0.35], [0, 0, -0.35], [0, 0.35, 0]].forEach(([dx, dy, dz]) => {
+      const spike = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), starMat);
+      spike.position.set(dx, starY + dy, dz);
+      group.add(spike);
+    });
+
+    const light = new THREE.PointLight(0xffcf8a, 0.8, 14);
+    light.position.y = 4;
+    group.add(light);
+
+    group.position.set(x, 0, z);
+    return group;
+  }
+
+  // Casse-noisette géant (Nussknacker), statique, façon garde en faction.
+  function buildNutcracker(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const coatMat = new THREE.MeshLambertMaterial({ color: 0xc23a3a });
+    const pantsMat = new THREE.MeshLambertMaterial({ color: 0x1e2a4a });
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xf0d0b0 });
+    const hatMat = new THREE.MeshLambertMaterial({ color: 0x1e2a4a });
+    const trimMat = new THREE.MeshLambertMaterial({ color: 0xd9a94a });
+
+    const legs = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.4, 0.5), pantsMat);
+    legs.position.y = 0.7;
+    group.add(legs);
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.1, 0.55), coatMat);
+    torso.position.y = 1.95;
+    group.add(torso);
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.15, 0.6), trimMat);
+    trim.position.y = 1.45;
+    group.add(trim);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), skinMat);
+    head.position.y = 2.8;
+    group.add(head);
+    const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.32, 0.7, 8), hatMat);
+    hat.position.y = 3.35;
+    group.add(hat);
+    const hatTrim = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.34, 0.34, 0.15, 8),
+      new THREE.MeshLambertMaterial({ color: 0xf3f8ff })
+    );
+    hatTrim.position.y = 3.0;
+    group.add(hatTrim);
+    const mustache = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.08, 0.1),
+      new THREE.MeshLambertMaterial({ color: 0x2a2a2a })
+    );
+    mustache.position.set(0, 2.68, 0.28);
+    group.add(mustache);
+    [-1, 1].forEach((side) => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.9, 0.22), coatMat);
+      arm.position.set(side * 0.5, 2.0, 0);
+      group.add(arm);
+    });
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
+  }
+
+  // Bonhomme de neige voxel : trois boules, écharpe, chapeau, carotte et
+  // bras en brindille, pour semer un peu de "cliché" partout dans la place.
+  function buildSnowman(x, z, scale) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf6faff });
+    const bottom = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.8, 0.85), snowMat);
+    bottom.position.y = 0.4;
+    group.add(bottom);
+    const mid = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.6, 0.62), snowMat);
+    mid.position.y = 1.05;
+    group.add(mid);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.46), snowMat);
+    head.position.y = 1.55;
+    group.add(head);
+    const nose = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.08, 0.32),
+      new THREE.MeshLambertMaterial({ color: 0xe8871f })
+    );
+    nose.position.set(0, 1.55, 0.32);
+    group.add(nose);
+    const hat = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 0.3, 0.4),
+      new THREE.MeshLambertMaterial({ color: 0x1e2a4a })
+    );
+    hat.position.y = 1.92;
+    group.add(hat);
+    const hatBrim = new THREE.Mesh(
+      new THREE.BoxGeometry(0.52, 0.08, 0.52),
+      new THREE.MeshLambertMaterial({ color: 0x1e2a4a })
+    );
+    hatBrim.position.y = 1.77;
+    group.add(hatBrim);
+    const scarfMat = new THREE.MeshLambertMaterial({ color: 0xc23a3a });
+    const scarf = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.14, 0.68), scarfMat);
+    scarf.position.y = 1.3;
+    group.add(scarf);
+    const scarfTail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.4, 0.1), scarfMat);
+    scarfTail.position.set(0.2, 1.05, 0.34);
+    group.add(scarfTail);
+    const buttonMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+    [0.85, 1.05, 1.25].forEach((y) => {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), buttonMat);
+      b.position.set(0, y, 0.44);
+      group.add(b);
+    });
+    [-1, 1].forEach((side) => {
+      const arm = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.5, 0.08),
+        new THREE.MeshLambertMaterial({ color: 0x4a3320 })
+      );
+      arm.position.set(side * 0.45, 1.15, 0);
+      arm.rotation.z = side * 0.7;
+      group.add(arm);
+    });
+
+    group.position.set(x, 0, z);
+    group.scale.setScalar(scale || 1);
+    return group;
+  }
+
+  // Guirlande lumineuse tendue entre deux réverbères (fil + petites boules
+  // colorées le long d'une courbe légèrement affaissée, façon marché de Noël).
+  function buildStringLight(fromVec3, toVec3) {
+    const { THREE } = S.ctx;
+    const mid = fromVec3.clone().add(toVec3).multiplyScalar(0.5);
+    mid.y -= 0.8;
+    const curve = new THREE.QuadraticBezierCurve3(fromVec3, mid, toVec3);
+    const points = curve.getPoints(20);
+    const wire = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color: 0x2a2a2a })
+    );
+    const group = new THREE.Group();
+    group.add(wire);
+    const bulbColors = [0xffcf8a, 0xc23a3a, 0x3a6fbf, 0xd9a94a, 0x3a8f4a];
+    const bulbs = [];
+    for (let i = 1; i < points.length - 1; i += 2) {
+      const color = bulbColors[i % bulbColors.length];
+      const bulb = new THREE.Mesh(
+        new THREE.BoxGeometry(0.11, 0.11, 0.11),
+        new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.8 })
+      );
+      bulb.position.copy(points[i]);
+      group.add(bulb);
+      bulbs.push({ mesh: bulb, phase: Math.random() * Math.PI * 2 });
+    }
+    group.userData.bulbs = bulbs;
+    return group;
+  }
+
+  // Petit carillon synthétisé (deux notes qui s'éteignent lentement),
+  // pour les cloches d'église au loin, entendues de temps en temps.
+  // Nuage d'orbes-lanternes féeriques qui flottent et orbitent lentement
+  // autour du sapin, à différentes hauteurs — l'effet "magique" de la
+  // photo de référence (pas des ornements fixes sur les branches, mais
+  // de vraies lumières suspendues dans l'air).
+  function buildFloatingOrbs(centerX, centerZ, count) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const colors = [0xffcf8a, 0xffa5c0, 0x9fd7ff, 0xffe37a, 0xc9a0ff, 0xff9a6a];
+    const orbs = [];
+    for (let i = 0; i < count; i += 1) {
+      const color = colors[i % colors.length];
+      const orb = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16 + Math.random() * 0.1, 0.16 + Math.random() * 0.1, 0.16 + Math.random() * 0.1),
+        new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 1 })
+      );
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 1.6 + Math.random() * 5.8;
+      const height = 1.8 + Math.random() * 9.5;
+      orb.position.set(centerX + Math.cos(angle) * radius, height, centerZ + Math.sin(angle) * radius);
+      addGlowSprite(orb, new THREE.Vector3(0, 0, 0), 0.5 + Math.random() * 0.3);
+      group.add(orb);
+      orbs.push({
+        mesh: orb, angle, radius, height,
+        speed: 0.05 + Math.random() * 0.09,
+        bobPhase: Math.random() * Math.PI * 2
+      });
+    }
+    group.userData.orbs = orbs;
+    group.userData.centerX = centerX;
+    group.userData.centerZ = centerZ;
+    return group;
+  }
+
+  function updateFloatingOrbs(orbGroup, elapsed) {
+    if (!orbGroup) return;
+    orbGroup.userData.orbs.forEach((o) => {
+      const angle = o.angle + elapsed * o.speed;
+      o.mesh.position.x = orbGroup.userData.centerX + Math.cos(angle) * o.radius;
+      o.mesh.position.z = orbGroup.userData.centerZ + Math.sin(angle) * o.radius;
+      o.mesh.position.y = o.height + Math.sin(elapsed * 0.6 + o.bobPhase) * 0.4;
+      o.mesh.material.emissiveIntensity = 0.65 + Math.sin(elapsed * 2 + o.bobPhase) * 0.35;
+    });
+  }
+
+  // Petit paquet cadeau emballé (boîte + ruban croisé + noeud), pour
+  // parsemer le pied du sapin comme sur la photo de référence.
+  function buildGiftBox(boxColorHex, ribbonColorHex, scale) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(0.6, 0.55, 0.6),
+      new THREE.MeshLambertMaterial({ color: boxColorHex })
+    );
+    box.position.y = 0.275;
+    group.add(box);
+    const ribbonMat = new THREE.MeshLambertMaterial({
+      color: ribbonColorHex, emissive: ribbonColorHex, emissiveIntensity: 0.25
+    });
+    const ribbonA = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.58, 0.14), ribbonMat);
+    ribbonA.position.y = 0.275;
+    group.add(ribbonA);
+    const ribbonB = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.58, 0.66), ribbonMat);
+    ribbonB.position.y = 0.275;
+    group.add(ribbonB);
+    const bowA = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.1), ribbonMat);
+    bowA.position.set(-0.1, 0.62, 0);
+    bowA.rotation.z = 0.5;
+    group.add(bowA);
+    const bowB = bowA.clone();
+    bowB.position.x = 0.1;
+    bowB.rotation.z = -0.5;
+    group.add(bowB);
+    group.rotation.y = Math.random() * Math.PI * 2;
+    group.scale.setScalar(scale || 1);
+    return group;
+  }
+
+  function playBellChime() {
+    const context = ensureAudio();
+    if (!context) return;
+    context.resume().catch(() => { });
+    const t0 = context.currentTime;
+    [0, 0.18].forEach((delay, i) => {
+      const osc = context.createOscillator();
+      const gain = context.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880 - i * 220, t0 + delay);
+      gain.gain.setValueAtTime(0.0001, t0 + delay);
+      gain.gain.exponentialRampToValueAtTime(0.18, t0 + delay + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + 1.4);
+      osc.connect(gain);
+      gain.connect(S.audio.master);
+      osc.start(t0 + delay);
+      osc.stop(t0 + delay + 1.5);
+    });
+  }
+
+  // ------------------------------------------------------------
+  // PARC D'ATTRACTIONS DE NOËL — grande roue, carrousel, petit train,
+  // patinoire, atelier du Père Noël + lutins, maisons en pain d'épices,
+  // soldats de plomb, allée de sucres d'orge, portail d'entrée lumineux.
+  // Tout l'attirail "parc façon Disney", transposé en voxel/Minecraft.
+  // ------------------------------------------------------------
+
+  function candyStripeTexture() {
+    return pixelTexture("candyStripe", 16, (ctx, size) => {
+      const cell = size / 8;
+      for (let y = 0; y < 8; y += 1) {
+        ctx.fillStyle = Math.floor(y / 2) % 2 === 0 ? "#c23a3a" : "#f6f0e0";
+        ctx.fillRect(0, y * cell, size, cell);
+      }
+    });
+  }
+
+  function gingerTexture() {
+    return pixelTexture("gingerbread", 16, (ctx, size) => {
+      const cell = size / 8;
+      const shades = ["#7a4a24", "#8a5630", "#6e4020", "#93602f"];
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 8; x += 1) {
+          ctx.fillStyle = shades[(x * 5 + y * 3) % shades.length];
+          ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    });
+  }
+
+  function icingTexture() {
+    return pixelTexture("icing", 16, (ctx, size) => {
+      ctx.fillStyle = "#fff8ee";
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = "#ffe9c4";
+      for (let i = 0; i < size; i += 4) ctx.fillRect(i, 0, 2, size);
+    });
+  }
+
+  function makeSignTexture(text, bg, fg) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 128;
+    const c2d = canvas.getContext("2d");
+    c2d.fillStyle = bg;
+    c2d.fillRect(0, 0, canvas.width, canvas.height);
+    c2d.font = "700 46px Georgia, 'Times New Roman', serif";
+    c2d.textAlign = "center";
+    c2d.textBaseline = "middle";
+    c2d.shadowColor = fg;
+    c2d.shadowBlur = 18;
+    c2d.fillStyle = fg;
+    c2d.fillText(text, canvas.width / 2, canvas.height / 2);
+    return new S.ctx.THREE.CanvasTexture(canvas);
+  }
+
+  // Portail d'entrée façon parc à thème : deux piliers rayés, une arche
+  // en blocs de bois et une enseigne lumineuse.
+  function buildParkEntranceArch(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const woodMat = new THREE.MeshLambertMaterial({ map: barkTexture() });
+    const candyMat = new THREE.MeshLambertMaterial({ map: candyStripeTexture() });
+
+    [-1, 1].forEach((side) => {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 6, 0.7), candyMat);
+      pillar.position.set(side * 4, 3, 0);
+      group.add(pillar);
+    });
+    const archBlocks = 9;
+    for (let i = 0; i < archBlocks; i += 1) {
+      const t = i / (archBlocks - 1);
+      const ax = -4 + t * 8;
+      const ay = 6 + Math.sin(t * Math.PI) * 1.6;
+      const block = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.7, 0.7), woodMat);
+      block.position.set(ax, ay, 0);
+      group.add(block);
+    }
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(6, 1.5),
+      new THREE.MeshBasicMaterial({ map: makeSignTexture("JOYEUX NOËL", "#0e1c3a", "#ffe37a") })
+    );
+    sign.position.set(0, 8.2, 0);
+    group.add(sign);
+    const signLight = new THREE.PointLight(0xffe37a, 0.6, 8);
+    signLight.position.set(0, 8.2, 1.5);
+    group.add(signLight);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
+  }
+
+  // Grande roue voxel : structure en A, rayons, anneau de blocs et
+  // nacelles colorées qui restent bien droites pendant la rotation.
+  function buildFerrisWheel(x, z) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const frameMat = new THREE.MeshLambertMaterial({ color: 0x2f3a52 });
+    const radius = 6;
+
+    [-1, 1].forEach((side) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.4, radius + 2, 0.4), frameMat);
+      leg.position.set(side * 1.5, (radius + 2) / 2, -1);
+      leg.rotation.z = side * 0.15;
+      group.add(leg);
+    });
+
+    const hubGroup = new THREE.Group();
+    hubGroup.position.set(0, radius + 1, 0);
+    group.add(hubGroup);
+
+    const spokeCount = 10;
+    const cabinColors = [0xc23a3a, 0xffe37a, 0x3a6fbf, 0x3a8f4a];
+    const cabins = [];
+    for (let i = 0; i < spokeCount; i += 1) {
+      const angle = (i / spokeCount) * Math.PI * 2;
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(radius * 2, 0.12, 0.12), frameMat);
+      spoke.rotation.z = angle;
+      hubGroup.add(spoke);
+
+      const rim = new THREE.Mesh(
+        new THREE.BoxGeometry(0.25, radius * 2 * Math.sin(Math.PI / spokeCount) * 1.05, 0.25),
+        frameMat
+      );
+      rim.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+      rim.rotation.z = angle + Math.PI / 2;
+      hubGroup.add(rim);
+
+      const cabin = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6, 0.7, 0.6),
+        new THREE.MeshLambertMaterial({
+          color: cabinColors[i % cabinColors.length],
+          emissive: cabinColors[i % cabinColors.length], emissiveIntensity: 0.3
+        })
+      );
+      cabin.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+      hubGroup.add(cabin);
+      cabins.push(cabin);
+    }
+    const hubBlock = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.7), frameMat);
+    hubGroup.add(hubBlock);
+
+    group.position.set(x, 0, z);
+    group.userData.hubGroup = hubGroup;
+    group.userData.cabins = cabins;
+    return group;
+  }
+
+  // Carrousel voxel : plateforme, toit conique en étages de blocs, et
+  // chevaux de bois montés sur des perches qui tournent autour du centre.
+  function buildCarousel(x, z) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const poleMat = new THREE.MeshLambertMaterial({ color: 0xd9a94a });
+    const roofMat = new THREE.MeshLambertMaterial({ map: candyStripeTexture() });
+    const platformMat = new THREE.MeshLambertMaterial({ map: barkTexture() });
+
+    const platform = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 0.3, 12), platformMat);
+    platform.position.y = 0.15;
+    group.add(platform);
+
+    const centerPole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 3.6, 8), poleMat);
+    centerPole.position.y = 1.95;
+    group.add(centerPole);
+
+    const roofTiers = 4;
+    let ry = 3.6;
+    for (let i = 0; i < roofTiers; i += 1) {
+      const size = 6.4 - i * 1.4;
+      const block = new THREE.Mesh(new THREE.CylinderGeometry(size / 2, size / 2 + 0.3, 0.5, 12), roofMat);
+      block.position.y = ry + i * 0.45;
+      group.add(block);
+    }
+    const spire = new THREE.Mesh(
+      new THREE.ConeGeometry(0.2, 0.5, 6),
+      new THREE.MeshLambertMaterial({ color: 0xffe37a, emissive: 0xffcf5c, emissiveIntensity: 0.7 })
+    );
+    spire.position.y = ry + roofTiers * 0.45 + 0.3;
+    group.add(spire);
+
+    const horseGroup = new THREE.Group();
+    const horseCount = 6;
+    const horses = [];
+    const horseColors = [0xf3f2ee, 0xc9a24a, 0x7a4a24, 0x2b2622];
+    for (let i = 0; i < horseCount; i += 1) {
+      const angle = (i / horseCount) * Math.PI * 2;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 6), poleMat);
+      pole.position.set(Math.cos(angle) * 2.2, 1.1, Math.sin(angle) * 2.2);
+      horseGroup.add(pole);
+      const horse = new THREE.Group();
+      const bodyMat = new THREE.MeshLambertMaterial({ color: horseColors[i % horseColors.length] });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.28), bodyMat);
+      horse.add(body);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.35, 0.22), bodyMat);
+      head.position.set(0.55, 0.25, 0);
+      horse.add(head);
+      horse.position.set(Math.cos(angle) * 2.2, 1.1, Math.sin(angle) * 2.2);
+      horse.rotation.y = -angle;
+      horseGroup.add(horse);
+      horses.push({ mesh: horse, phase: Math.random() * Math.PI * 2 });
+    }
+    group.add(horseGroup);
+
+    group.position.set(x, 0, z);
+    group.userData.horseGroup = horseGroup;
+    group.userData.horses = horses;
+    return group;
+  }
+
+  // Sucre d'orge voxel : bâton rayé + crosse en petits blocs incurvés.
+  function buildCandyCane(scale) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const mat = new THREE.MeshLambertMaterial({ map: candyStripeTexture() });
+    const stick = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.1, 0.16), mat);
+    stick.position.y = 0.55;
+    group.add(stick);
+    const hookBlocks = 5;
+    for (let i = 0; i < hookBlocks; i += 1) {
+      const t = i / (hookBlocks - 1);
+      const angle = Math.PI * t;
+      const block = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.16), mat);
+      block.position.set(Math.sin(angle) * 0.22, 1.1 + Math.cos(angle) * 0.22, 0);
+      group.add(block);
+    }
+    group.scale.setScalar(scale || 1);
+    return group;
+  }
+
+  // Petite maison en pain d'épices : murs "biscuit", toit glaçage,
+  // bonbons collés sur la façade et congère devant la porte.
+  function buildGingerbreadHouse(x, z, rotY, scale) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const gingerMat = new THREE.MeshLambertMaterial({ map: gingerTexture() });
+    const icingMat = new THREE.MeshLambertMaterial({ map: icingTexture() });
+    const candyColors = [0xc23a3a, 0x3a8f4a, 0xffe37a, 0x3a6fbf];
+
+    const walls = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.0, 2.4), gingerMat);
+    walls.position.y = 1.0;
+    group.add(walls);
+
+    const roofL = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.2, 1.7), icingMat);
+    roofL.position.set(0, 2.15, -0.7);
+    roofL.rotation.x = -0.55;
+    group.add(roofL);
+    const roofR = roofL.clone();
+    roofR.position.z = 0.7;
+    roofR.rotation.x = 0.55;
+    group.add(roofR);
+
+    for (let i = 0; i < 6; i += 1) {
+      const color = candyColors[i % candyColors.length];
+      const candy = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.16, 0.05),
+        new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.2 })
+      );
+      candy.position.set((Math.random() - 0.5) * 1.9, 0.4 + Math.random() * 1.3, 1.21);
+      group.add(candy);
+    }
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.0, 0.1), new THREE.MeshLambertMaterial({ color: 0x5a3320 }));
+    door.position.set(0, 0.5, 1.21);
+    group.add(door);
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), new THREE.MeshBasicMaterial({ color: 0xffd48a }));
+    win.position.set(-0.7, 1.3, 1.21);
+    group.add(win);
+    const light = new THREE.PointLight(0xffc772, 0.4, 5);
+    light.position.set(-0.7, 1.3, 1.8);
+    group.add(light);
+    group.add(buildSnowMound(2.6, 1.6, 0.25));
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    group.scale.setScalar(scale || 1);
+    return group;
+  }
+
+  // Petit patineur voxel, très simplifié, qui glisse en cercle sur la glace.
+  function buildSkater(color) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.5, 0.16), new THREE.MeshLambertMaterial({ color }));
+    body.position.y = 0.4;
+    group.add(body);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), new THREE.MeshLambertMaterial({ color: 0xf0d0b0 }));
+    head.position.y = 0.74;
+    group.add(head);
+    const scarf = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.18), new THREE.MeshLambertMaterial({ color: 0xc23a3a }));
+    scarf.position.y = 0.6;
+    group.add(scarf);
+    return group;
+  }
+
+  // Patinoire circulaire (texture de glace pixel) entourée d'un muret bas,
+  // avec quelques patineurs qui tournent en rond.
+  function buildIceRink(x, z, radius) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const ice = new THREE.Mesh(
+      new THREE.CircleGeometry(radius, 20),
+      new THREE.MeshStandardMaterial({ map: iceTexture(), roughness: 0.1, metalness: 0.5 })
+    );
+    ice.rotation.x = -Math.PI / 2;
+    ice.position.y = 0.03;
+    group.add(ice);
+
+    const borderMat = new THREE.MeshLambertMaterial({ map: barkTexture() });
+    const borderCount = 20;
+    for (let i = 0; i < borderCount; i += 1) {
+      const angle = (i / borderCount) * Math.PI * 2;
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.2), borderMat);
+      post.position.set(Math.cos(angle) * (radius + 0.2), 0.2, Math.sin(angle) * (radius + 0.2));
+      group.add(post);
+    }
+
+    const skaterColors = [0x3a6fbf, 0xc23a3a, 0x3a8f4a, 0xd9a94a];
+    const skaters = [];
+    for (let i = 0; i < 5; i += 1) {
+      const skater = buildSkater(skaterColors[i % skaterColors.length]);
+      skaters.push({
+        mesh: skater, radius: radius * (0.3 + Math.random() * 0.55),
+        phase: Math.random() * Math.PI * 2, speed: 0.25 + Math.random() * 0.2
+      });
+      group.add(skater);
+    }
+
+    group.position.set(x, 0, z);
+    group.userData.skaters = skaters;
+    return group;
+  }
+
+  // Soldat de plomb en faction, façon garde de parc à thème.
+  function buildToySoldier(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const coatMat = new THREE.MeshLambertMaterial({ color: 0xc23a3a });
+    const pantsMat = new THREE.MeshLambertMaterial({ color: 0xf3f2ee });
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xf0d0b0 });
+    const hatMat = new THREE.MeshLambertMaterial({ color: 0x1c1c1e });
+    const trimMat = new THREE.MeshLambertMaterial({ color: 0xd9a94a });
+
+    const legs = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.1, 0.4), pantsMat);
+    legs.position.y = 0.55;
+    group.add(legs);
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.9, 0.45), coatMat);
+    torso.position.y = 1.55;
+    group.add(torso);
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.12, 0.5), trimMat);
+    belt.position.y = 1.15;
+    group.add(belt);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), skinMat);
+    head.position.y = 2.2;
+    group.add(head);
+    const hat = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.7, 0.34), hatMat);
+    hat.position.y = 2.75;
+    group.add(hat);
+    [-1, 1].forEach((side) => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), coatMat);
+      arm.position.set(side * 0.4, 1.55, 0);
+      group.add(arm);
+    });
+    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.1, 0.08), new THREE.MeshLambertMaterial({ map: barkTexture() }));
+    gun.position.set(0.42, 1.6, 0.15);
+    group.add(gun);
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
+  }
+
+  // Petit lutin voxel, façon aide du Père Noël devant l'atelier.
+  function buildElf(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const suitMat = new THREE.MeshLambertMaterial({ color: 0x2f6b3a });
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xf0d0b0 });
+    const hatMat = new THREE.MeshLambertMaterial({ color: 0xc23a3a });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 0.24), suitMat);
+    body.position.y = 0.5;
+    group.add(body);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.26), skinMat);
+    head.position.y = 0.9;
+    group.add(head);
+    const hat = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.4, 5), hatMat);
+    hat.position.y = 1.2;
+    group.add(hat);
+    [-1, 1].forEach((side) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.35, 0.12), suitMat);
+      leg.position.set(side * 0.08, 0.17, 0);
+      group.add(leg);
+    });
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    return group;
+  }
+
+  // Atelier du Père Noël : grand chalet en rondins, enseigne lumineuse,
+  // fenêtres chaudes et une petite équipe de lutins qui s'affairent devant.
+  function buildSantaWorkshop(x, z, rotY) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const woodMat = new THREE.MeshLambertMaterial({ map: barkTexture() });
+    const roofMat = new THREE.MeshLambertMaterial({ color: 0x8a2f2f });
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xf3f8ff });
+
+    const walls = new THREE.Mesh(new THREE.BoxGeometry(5, 3.2, 4.4), woodMat);
+    walls.position.y = 1.6;
+    group.add(walls);
+    const roofL = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.25, 2.9), roofMat);
+    roofL.position.set(0, 3.4, -1.25);
+    roofL.rotation.x = -0.5;
+    group.add(roofL);
+    const roofR = roofL.clone();
+    roofR.position.z = 1.25;
+    roofR.rotation.x = 0.5;
+    group.add(roofR);
+    const snowL = new THREE.Mesh(new THREE.BoxGeometry(5.7, 0.14, 1.1), snowMat);
+    snowL.position.set(0, 3.9, -2.2);
+    snowL.rotation.x = -0.5;
+    group.add(snowL);
+    const snowR = snowL.clone();
+    snowR.position.z = 2.2;
+    snowR.rotation.x = 0.5;
+    group.add(snowR);
+
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.8, 0.1), new THREE.MeshLambertMaterial({ color: 0x3a2314 }));
+    door.position.set(0, 0.9, 2.21);
+    group.add(door);
+
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.6, 0.9),
+      new THREE.MeshBasicMaterial({ map: makeSignTexture("ATELIER DU PÈRE NOËL", "#3a2314", "#ffe37a") })
+    );
+    sign.position.set(0, 3.0, 2.22);
+    group.add(sign);
+
+    [-1.7, 1.7].forEach((wx) => {
+      const win = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), new THREE.MeshBasicMaterial({ color: 0xffd48a }));
+      win.position.set(wx, 1.7, 2.21);
+      group.add(win);
+      const light = new THREE.PointLight(0xffc772, 0.5, 6);
+      light.position.set(wx, 1.7, 3);
+      group.add(light);
+    });
+
+    const elves = [];
+    for (let i = 0; i < 4; i += 1) {
+      const ex = -2 + i * 1.3 + (Math.random() - 0.5) * 0.4;
+      const elf = buildElf(ex, 3.2 + Math.random() * 1.2, Math.random() * Math.PI * 2);
+      group.add(elf);
+      elves.push({ mesh: elf, phase: Math.random() * Math.PI * 2 });
+    }
+    group.add(buildSnowMound(6, 5, 0.4));
+
+    group.position.set(x, 0, z);
+    group.rotation.y = rotY || 0;
+    group.userData.elves = elves;
+    return group;
+  }
+
+  // Petit train de Noël (locomotive + wagons) sur une voie circulaire
+  // simplifiée (traverses en bois), qui fait le tour du parc en boucle.
+  function buildTrainEngine() {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0xc23a3a });
+    const trimMat = new THREE.MeshLambertMaterial({ color: 0xd9a94a });
+    const darkMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.55, 1.3), bodyMat);
+    body.position.y = 0.5;
+    group.add(body);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.55), bodyMat);
+    cabin.position.set(0, 0.95, -0.35);
+    group.add(cabin);
+    const chimney = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.4, 6), darkMat);
+    chimney.position.set(0, 1.0, 0.4);
+    group.add(chimney);
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.08, 1.35), trimMat);
+    trim.position.y = 0.24;
+    group.add(trim);
+    const lantern = new THREE.Mesh(
+      new THREE.BoxGeometry(0.15, 0.15, 0.1),
+      new THREE.MeshLambertMaterial({ color: 0xffe37a, emissive: 0xffcf5c, emissiveIntensity: 0.8 })
+    );
+    lantern.position.set(0, 0.55, 0.68);
+    group.add(lantern);
+    [-0.32, 0.32].forEach((wx) => {
+      [0.5, -0.1].forEach((wz) => {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.1, 8), darkMat);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wx, 0.16, wz);
+        group.add(wheel);
+      });
+    });
+    return group;
+  }
+
+  function buildTrainCar(color) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const bodyMat = new THREE.MeshLambertMaterial({ color });
+    const darkMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.5, 1.1), bodyMat);
+    body.position.y = 0.45;
+    group.add(body);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.1, 1.2), new THREE.MeshLambertMaterial({ color: 0xf3f8ff }));
+    roof.position.y = 0.75;
+    group.add(roof);
+    [-0.3, 0.3].forEach((wx) => {
+      [0.4, -0.4].forEach((wz) => {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 8), darkMat);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wx, 0.14, wz);
+        group.add(wheel);
+      });
+    });
+    return group;
+  }
+
+  function buildChristmasTrain(centerX, centerZ, radius) {
+    const { THREE } = S.ctx;
+    const group = new THREE.Group();
+    const engine = buildTrainEngine();
+    group.add(engine);
+    const carColors = [0x3a6fbf, 0x3a8f4a, 0xd9a94a];
+    const cars = carColors.map((c) => {
+      const car = buildTrainCar(c);
+      group.add(car);
+      return car;
+    });
+    const railMat = new THREE.MeshLambertMaterial({ map: barkTexture() });
+    const tieCount = 48;
+    for (let i = 0; i < tieCount; i += 1) {
+      const angle = (i / tieCount) * Math.PI * 2;
+      const tie = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.16), railMat);
+      tie.position.set(centerX + Math.cos(angle) * radius, 0.05, centerZ + Math.sin(angle) * radius);
+      tie.rotation.y = angle;
+      group.add(tie);
+    }
+    group.userData.engine = engine;
+    group.userData.cars = cars;
+    group.userData.centerX = centerX;
+    group.userData.centerZ = centerZ;
+    group.userData.radius = radius;
+    return group;
+  }
+
+  // Assemble tout le parc : place enneigée, portail, grande roue,
+  // carrousel, petit train, patinoire, atelier du Père Noël, maisons en
+  // pain d'épices, soldats de plomb, allée de sucres d'orge, réverbères.
+  function buildAmusementPark(parentGroup) {
+    const { THREE } = S.ctx;
+    const pg = new THREE.Group();
+    pg.name = "bdayPark";
+    const cx = PARK.x;
+    const cz = PARK.z;
+    S.snow.park = {};
+
+    const plaza = new THREE.Mesh(
+      new THREE.CircleGeometry(PARK.radius - 1, 24),
+      new THREE.MeshLambertMaterial({ map: snowTexture(), flatShading: true })
+    );
+    plaza.rotation.x = -Math.PI / 2;
+    plaza.position.set(cx, 0.04, cz);
+    pg.add(plaza);
+
+    pg.add(buildParkEntranceArch(cx, cz + PARK.radius - 2, Math.PI));
+
+    const ferris = buildFerrisWheel(cx - 8, cz - 6);
+    pg.add(ferris);
+    S.snow.park.ferris = ferris;
+
+    const carousel = buildCarousel(cx + 7, cz - 4);
+    pg.add(carousel);
+    S.snow.park.carousel = carousel;
+
+    const train = buildChristmasTrain(cx, cz, PARK.radius - 3.5);
+    pg.add(train);
+    S.snow.park.train = train;
+
+    const rink = buildIceRink(cx, cz + 7, 4.5);
+    pg.add(rink);
+    S.snow.park.rink = rink;
+
+    const workshop = buildSantaWorkshop(cx - 2, cz + 13, Math.PI);
+    pg.add(workshop);
+    S.snow.park.workshop = workshop;
+
+    for (let i = -1; i <= 1; i += 2) {
+      for (let d = 0; d < 5; d += 1) {
+        const cane = buildCandyCane(1 + Math.random() * 0.3);
+        cane.position.set(cx + i * 1.6, 0, cz + PARK.radius - 3 - d * 1.4);
+        pg.add(cane);
+      }
+    }
+
+    [[cx - 12, cz + 2], [cx + 12, cz + 8], [cx - 6, cz - 12], [cx + 3, cz - 12]].forEach(([gx, gz]) => {
+      pg.add(buildGingerbreadHouse(gx, gz, Math.random() * Math.PI * 2, 0.9 + Math.random() * 0.3));
+    });
+
+    pg.add(buildToySoldier(cx - 2.5, cz + PARK.radius - 4, 0));
+    pg.add(buildToySoldier(cx + 2.5, cz + PARK.radius - 4, 0));
+
+    const lampPositions = [];
+    const lampCount = 10;
+    for (let i = 0; i < lampCount; i += 1) {
+      const angle = (i / lampCount) * Math.PI * 2;
+      const dist = PARK.radius - 2;
+      const lx = cx + Math.cos(angle) * dist;
+      const lz = cz + Math.sin(angle) * dist;
+      pg.add(buildLanternPost(lx, lz, i % 2 === 0));
+      lampPositions.push(new THREE.Vector3(lx, 1.65, lz));
+    }
+    const strings = [];
+    for (let i = 0; i < lampPositions.length; i += 1) {
+      const s = buildStringLight(lampPositions[i], lampPositions[(i + 1) % lampPositions.length]);
+      pg.add(s);
+      strings.push(s);
+    }
+    S.snow.park.strings = strings;
+
+    for (let i = 0; i < 6; i += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = PARK.radius - 4 + Math.random() * 2;
+      pg.add(buildSnowyPine(cx + Math.cos(angle) * dist, cz + Math.sin(angle) * dist, 0.9 + Math.random() * 0.5));
+    }
+
+    parentGroup.add(pg);
+    S.snow.park.group = pg;
+  }
+
+  // Anime la grande roue, le carrousel, le petit train, les patineurs,
+  // les lutins de l'atelier et les guirlandes du parc.
+  function updateAmusementPark(delta, elapsed) {
+    const p = S.snow.park;
+    if (!p || !p.group) return;
+    if (p.ferris) {
+      const hub = p.ferris.userData.hubGroup;
+      hub.rotation.z += delta * 0.12;
+      p.ferris.userData.cabins.forEach((cabin) => {
+        cabin.rotation.z = -hub.rotation.z;
+      });
+    }
+    if (p.carousel) {
+      p.carousel.userData.horseGroup.rotation.y += delta * 0.35;
+      p.carousel.userData.horses.forEach((h) => {
+        h.mesh.position.y = 1.1 + Math.sin(elapsed * 2 + h.phase) * 0.12;
+      });
+    }
+    if (p.train) {
+      const speed = 0.09;
+      const baseAngle = elapsed * speed;
+      const cx = p.train.userData.centerX;
+      const cz = p.train.userData.centerZ;
+      const radius = p.train.userData.radius;
+      const setOnTrack = (mesh, angle) => {
+        mesh.position.set(cx + Math.cos(angle) * radius, 0.02, cz + Math.sin(angle) * radius);
+        mesh.rotation.y = -angle + Math.PI / 2;
+      };
+      setOnTrack(p.train.userData.engine, baseAngle);
+      p.train.userData.cars.forEach((car, i) => {
+        setOnTrack(car, baseAngle - (i + 1) * 0.09);
+      });
+    }
+    if (p.rink) {
+      p.rink.userData.skaters.forEach((s) => {
+        const angle = elapsed * s.speed + s.phase;
+        s.mesh.position.set(Math.cos(angle) * s.radius, 0.05, Math.sin(angle) * s.radius);
+        s.mesh.rotation.y = -angle + Math.PI / 2;
+      });
+    }
+    if (p.workshop && p.workshop.userData.elves) {
+      p.workshop.userData.elves.forEach((e) => {
+        e.mesh.position.y = Math.sin(elapsed * 3 + e.phase) * 0.04;
+        e.mesh.rotation.y += delta * 0.6;
+      });
+    }
+    if (p.strings) {
+      p.strings.forEach((s) => {
+        s.userData.bulbs.forEach((b) => {
+          b.mesh.material.emissiveIntensity = 0.5 + Math.sin(elapsed * 2 + b.phase) * 0.35;
+        });
+      });
+    }
+  }
+
+  // Assemble tout le village : place pavée, fontaine, sapin géant,
+  // église, maisons à colombages en arc de cercle, échoppes de marché,
+  // casse-noisettes, bonhommes de neige, bûches, réverbères et guirlandes.
+  function buildChristmasVillage(parentGroup) {
+    const { THREE } = S.ctx;
+    const vg = new THREE.Group();
+    vg.name = "bdayVillage";
+    const cx = VILLAGE.x;
+    const cz = VILLAGE.z;
+    S.snow.village = {};
+
+    const plaza = new THREE.Mesh(
+      new THREE.CircleGeometry(VILLAGE.radius - 1, 24),
+      new THREE.MeshLambertMaterial({ map: plazaMosaicTexture() })
+    );
+    plaza.rotation.x = -Math.PI / 2;
+    plaza.position.set(cx, 0.03, cz);
+    vg.add(plaza);
+
+    vg.add(buildFountain(cx, cz));
+
+    const tree = buildGiantChristmasTree(cx + 5.5, cz - 3);
+    vg.add(tree);
+    S.snow.village.tree = tree;
+
+    // Nuage d'orbes-lanternes féeriques qui flottent autour du sapin
+    const orbGroup = buildFloatingOrbs(cx + 5.5, cz - 3, 26);
+    vg.add(orbGroup);
+    S.snow.village.orbGroup = orbGroup;
+
+    // Petits cadeaux emballés dispersés au pied du sapin
+    const giftPalette = [
+      [0xc23a3a, 0xd9a94a], [0x1e4a2a, 0xf3f2ee], [0x1e2a4a, 0xd9a94a],
+      [0xd9a94a, 0xc23a3a], [0xf3e2b0, 0x1e4a2a]
+    ];
+    for (let i = 0; i < 7; i += 1) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 1.3 + Math.random() * 2.4;
+      const [boxColor, ribbonColor] = giftPalette[i % giftPalette.length];
+      const gift = buildGiftBox(boxColor, ribbonColor, 0.7 + Math.random() * 0.5);
+      gift.position.set(cx + 5.5 + Math.cos(a) * r, 0, cz - 3 + Math.sin(a) * r);
+      vg.add(gift);
+    }
+
+    const church = buildChurch(cx - 9, cz - 10, Math.PI * 0.15);
+    vg.add(church);
+    S.snow.village.churchBell = church.userData.bell;
+
+    // Maisons à colombages en arc de cercle autour de la place
+    const houseColors = ["#c23a3a", "#1e4a2a", "#f0e6d2", "#c23a3a", "#1e4a2a"];
+    for (let i = 0; i < houseColors.length; i += 1) {
+      const angle = Math.PI * 0.35 + (i / (houseColors.length - 1)) * Math.PI * 0.9;
+      const dist = VILLAGE.radius + 1.5;
+      const hx = cx + Math.cos(angle) * dist;
+      const hz = cz + Math.sin(angle) * dist;
+      const house = buildHalfTimberedHouse(
+        hx, hz, -angle + Math.PI / 2, houseColors[i], 0x8a2f2f, 1 + Math.random() * 0.15
+      );
+      vg.add(house);
+    }
+
+    // Échoppes de marché alignées sur l'autre côté de la place
+    const stallGoods = [
+      [0xd9432f, 0xe8b23a],
+      [0xf3e2b0],
+      [0xd9a94a],
+      [0xc23a3a, 0x3a6fbf]
+    ];
+    const stallRoofs = [0xc23a3a, 0x1e4a2a, 0xd9a94a, 0xc23a3a];
+    for (let i = 0; i < 4; i += 1) {
+      const angle = -Math.PI * 0.4 + i * 0.32;
+      const dist = VILLAGE.radius + 1.2;
+      const sx = cx + Math.cos(angle) * dist;
+      const sz = cz + Math.sin(angle) * dist;
+      vg.add(buildMarketStall(sx, sz, -angle + Math.PI / 2 + Math.PI, stallRoofs[i], stallGoods[i]));
+    }
+
+    // Casse-noisettes géants en faction de part et d'autre du sapin
+    vg.add(buildNutcracker(cx + 2.4, cz - 5.2, 0.3));
+    vg.add(buildNutcracker(cx + 8.4, cz - 5.2, -0.3));
+
+    // Bonhommes de neige dispersés
+    [[cx - 4, cz + 6], [cx + 12, cz + 4], [cx - 10, cz + 3]].forEach(([sx, sz]) => {
+      vg.add(buildSnowman(sx, sz, 0.85 + Math.random() * 0.3));
+    });
+
+    // Bûches de bois empilées, un peu de neige dessus
+    const woodPile = new THREE.Group();
+    const logMat = new THREE.MeshLambertMaterial({ map: barkTexture() });
+    for (let i = 0; i < 6; i += 1) {
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.8, 8), logMat);
+      log.rotation.z = Math.PI / 2;
+      log.position.set((i % 3) * 0.3, Math.floor(i / 3) * 0.28 + 0.15, 0);
+      woodPile.add(log);
+    }
+    const snowOnPile = new THREE.Mesh(
+      new THREE.BoxGeometry(1.1, 0.08, 0.9),
+      new THREE.MeshLambertMaterial({ color: 0xf3f8ff })
+    );
+    snowOnPile.position.set(0.3, 0.62, 0);
+    woodPile.add(snowOnPile);
+    woodPile.position.set(cx - 6, 0, cz + 8);
+    vg.add(woodPile);
+
+    // Réverbères en fonte noire tout autour de la place
+    const lampPositions = [];
+    const lampCount = 8;
+    for (let i = 0; i < lampCount; i += 1) {
+      const angle = (i / lampCount) * Math.PI * 2;
+      const dist = VILLAGE.radius - 2.5;
+      const lx = cx + Math.cos(angle) * dist;
+      const lz = cz + Math.sin(angle) * dist;
+      vg.add(buildLanternPost(lx, lz, i % 2 === 0));
+      lampPositions.push(new THREE.Vector3(lx, 1.65, lz));
+    }
+
+    // Guirlandes lumineuses tendues entre les réverbères
+    const strings = [];
+    for (let i = 0; i < lampPositions.length; i += 1) {
+      const s = buildStringLight(lampPositions[i], lampPositions[(i + 1) % lampPositions.length]);
+      vg.add(s);
+      strings.push(s);
+    }
+
+    // Étoile lumineuse et grappe de boules suspendues au-dessus de la place
+    const starMat2 = new THREE.MeshLambertMaterial({ color: 0xffe37a, emissive: 0xffcf5c, emissiveIntensity: 0.9 });
+    const hangStar = new THREE.Group();
+    const hangStarCore = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), starMat2);
+    hangStar.add(hangStarCore);
+    [[0.3, 0, 0], [-0.3, 0, 0], [0, 0, 0.3], [0, 0, -0.3], [0, -0.3, 0]].forEach(([dx, dy, dz]) => {
+      const spike = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), starMat2);
+      spike.position.set(dx, dy, dz);
+      hangStar.add(spike);
+    });
+    hangStar.position.set(cx, 6.5, cz + 4);
+    vg.add(hangStar);
+    const ballCluster = new THREE.Group();
+    [0xc23a3a, 0xd9a94a, 0x3a6fbf].forEach((c, i) => {
+      const ball = new THREE.Mesh(
+        new THREE.BoxGeometry(0.32, 0.32, 0.32),
+        new THREE.MeshLambertMaterial({ color: c, emissive: c, emissiveIntensity: 0.35 })
+      );
+      ball.position.set((i - 1) * 0.35, -i * 0.25, 0);
+      ballCluster.add(ball);
+    });
+    ballCluster.position.set(cx - 4, 6.2, cz + 2);
+    vg.add(ballCluster);
+
+    parentGroup.add(vg);
+    S.snow.village.group = vg;
+    S.snow.village.strings = strings;
+    S.snow.village.nextBellAt = 5 + Math.random() * 6;
+    S.snow.village.bellSwingUntil = 0;
+  }
+
+  // Anime les guirlandes (scintillement), le sapin (léger balancement),
+  // et la cloche de l'église qui sonne de temps en temps.
+  function updateChristmasVillage(delta, elapsed) {
+    const v = S.snow.village;
+    if (!v || !v.group) return;
+    if (v.strings) {
+      v.strings.forEach((s) => {
+        s.userData.bulbs.forEach((b) => {
+          b.mesh.material.emissiveIntensity = 0.5 + Math.sin(elapsed * 2 + b.phase) * 0.35;
+        });
+      });
+    }
+    if (v.tree) {
+      v.tree.rotation.y = Math.sin(elapsed * 0.1) * 0.03;
+    }
+    updateFloatingOrbs(v.orbGroup, elapsed);
+    if (v.churchBell) {
+      if (elapsed < v.bellSwingUntil) {
+        const remain = v.bellSwingUntil - elapsed;
+        v.churchBell.rotation.z = Math.sin(remain * 10) * 0.35 * (remain / 1.2);
+      } else {
+        v.churchBell.rotation.z = 0;
+      }
+    }
+    if (elapsed >= v.nextBellAt) {
+      playBellChime();
+      v.bellSwingUntil = elapsed + 1.2;
+      v.nextBellAt = elapsed + 14 + Math.random() * 10;
+    }
   }
 
   function createSkyText(text) {
@@ -2599,6 +4275,40 @@
     if (nearLakeCenter || timeUp) {
       startLakeArrival();
     }
+  }
+
+  // Une fois arrivée sur le lac, on conserve le regard libre et les petits
+  // mouvements du décor : la barque ne donne donc plus l'impression d'être
+  // figée pendant que l'on profite de la vue avant la scène d'hiver.
+  function updateLakeArrival(delta, elapsed) {
+    applyLook();
+    S.boat.group.position.z = Math.max(
+      S.river.lakeCenterZ + 1,
+      S.boat.group.position.z - delta * 0.12
+    );
+    S.boat.group.position.x = Math.sin(elapsed * 0.34 + S.boat.bobPhase) * 0.28;
+    S.boat.group.position.y = Math.sin(elapsed * 1.05 + S.boat.bobPhase) * 0.055;
+    S.boat.group.rotation.z = Math.sin(elapsed * 0.88 + S.boat.bobPhase) * 0.028;
+    S.boat.group.rotation.y = Math.sin(elapsed * 0.34 + S.boat.bobPhase) * 0.018;
+
+    if (S.river.lakeBamboo) {
+      S.river.lakeBamboo.forEach((b) => {
+        b.rotation.z = Math.sin(elapsed * 0.6 + b.userData.swayPhase) * 0.025;
+      });
+    }
+    if (S.river.lakeLilyPads) {
+      S.river.lakeLilyPads.forEach((p) => {
+        p.position.y = 0.05 + Math.sin(elapsed * 1.1 + p.userData.bobPhase) * 0.015;
+      });
+    }
+    if (S.river.lakeBuoys) {
+      S.river.lakeBuoys.forEach((b) => {
+        b.position.y = 0.08 + Math.sin(elapsed * 1.2 + b.userData.bobPhase) * 0.03;
+        b.rotation.y = elapsed * 0.15 + b.userData.bobPhase;
+      });
+    }
+    if (S.river.duckFamily) updateDuckOrbit(S.river.duckFamily, elapsed);
+    if (S.river.sparkles) S.river.sparkles.material.opacity = 0.55 + Math.sin(elapsed * 3) * 0.2;
   }
 
   function updatePetals(delta, elapsed) {
@@ -2801,6 +4511,8 @@
         }
       });
     }
+    updateChristmasVillage(delta, elapsed);
+    updateAmusementPark(delta, elapsed);
     if (S.snow.textSprite && now() - S.phaseStartedAt >= CONFIG.snowSceneMinDuration) {
       S.snow.textSprite.material.opacity = Math.min(1, S.snow.textSprite.material.opacity + delta * 0.3);
       S.phase = PHASE.FINALE;
@@ -2828,6 +4540,9 @@
     switch (S.phase) {
       case PHASE.RIVER_RIDE:
         updateRiverRide(delta, elapsed);
+        break;
+      case PHASE.LAKE_ARRIVAL:
+        updateLakeArrival(delta, elapsed);
         break;
       case PHASE.SNOW_SCENE:
       case PHASE.FINALE:
