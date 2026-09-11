@@ -80,7 +80,10 @@
     look: { yaw: 0, pitch: 0.05, dragging: false, lastX: 0, lastY: 0, touchId: null },
     boat: null,
     river: { willows: [], fish: [], waterMesh: null, lakeMesh: null, mist: [] },
-    snow: { group: null, auroraMaterials: [], snowflakes: null, textSprite: null },
+    snow: {
+      group: null, auroraMaterials: [], snowflakes: null, textSprite: null,
+      keys: new Set(), playerSpeed: 8, walkLimit: 82
+    },
     timers: [],
     phaseStartedAt: 0,
     riverMessageTimer: null
@@ -2114,11 +2117,17 @@
     group.add(flakes);
     S.snow.snowflakes = flakes;
 
-    // Caméra en hauteur, au centre de la carte, pour voir d'un coup d'œil
-    // le chalet, le canal, l'attelage et le village au réveil.
-    S.ctx.camera.position.set(6, 30, -19);
+    // La caméra était encore attachée à la barque : on la détache, puis on
+    // démarre au centre de la carte enneigée, au niveau du sol.
+    scene.add(S.ctx.camera);
+    S.ctx.camera.position.set(0, 1.8, 6);
+    S.ctx.camera.rotation.set(0, 0, 0, "YXZ");
     S.look.yaw = 0;
-    S.look.pitch = -0.6;
+    S.look.pitch = -0.08;
+    S.snow.keys.clear();
+    S.dom.hint.textContent = S.ctx.isMobile
+      ? "Glisser pour regarder autour de vous"
+      : "ZQSD / WASD ou les flèches pour marcher · Glisser pour regarder";
   }
 
   // ------------------------------------------------------------
@@ -4161,6 +4170,15 @@
         if (t.identifier === S.look.touchId) onEnd();
       }
     }, { passive: true });
+
+    window.addEventListener("keydown", (e) => {
+      const key = e.key.toLowerCase();
+      if (["z", "q", "s", "d", "w", "a", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
+        S.snow.keys.add(key);
+        if (key.startsWith("arrow")) e.preventDefault();
+      }
+    });
+    window.addEventListener("keyup", (e) => S.snow.keys.delete(e.key.toLowerCase()));
   }
 
   // ============================================================
@@ -4471,6 +4489,7 @@
 
   function updateSnowScene(delta, elapsed) {
     applyLook();
+    updateSnowPlayer(delta);
     S.snow.auroraMaterials.forEach((mat, i) => { mat.uniforms.uTime.value = elapsed * (1 + i * 0.15); });
     if (S.snow.snowflakes) {
       const pos = S.snow.snowflakes.geometry.attributes.position;
@@ -4516,6 +4535,33 @@
     if (S.snow.textSprite && now() - S.phaseStartedAt >= CONFIG.snowSceneMinDuration) {
       S.snow.textSprite.material.opacity = Math.min(1, S.snow.textSprite.material.opacity + delta * 0.3);
       S.phase = PHASE.FINALE;
+    }
+  }
+
+  function updateSnowPlayer(delta) {
+    const { camera } = S.ctx;
+    const keys = S.snow.keys;
+    const inputX =
+      (keys.has("d") || keys.has("arrowright") ? 1 : 0) -
+      (keys.has("q") || keys.has("a") || keys.has("arrowleft") ? 1 : 0);
+    const inputZ =
+      (keys.has("s") || keys.has("arrowdown") ? 1 : 0) -
+      (keys.has("z") || keys.has("w") || keys.has("arrowup") ? 1 : 0);
+    if (!inputX && !inputZ) return;
+
+    const length = Math.hypot(inputX, inputZ);
+    const localX = inputX / length;
+    const localZ = inputZ / length;
+    const cos = Math.cos(S.look.yaw);
+    const sin = Math.sin(S.look.yaw);
+    camera.position.x += (localX * cos + localZ * sin) * S.snow.playerSpeed * delta;
+    camera.position.z += (-localX * sin + localZ * cos) * S.snow.playerSpeed * delta;
+
+    const radius = Math.hypot(camera.position.x, camera.position.z);
+    if (radius > S.snow.walkLimit) {
+      const factor = S.snow.walkLimit / radius;
+      camera.position.x *= factor;
+      camera.position.z *= factor;
     }
   }
 
