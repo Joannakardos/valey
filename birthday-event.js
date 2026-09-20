@@ -34,13 +34,13 @@
     //   }
     //   return target;
     // },
-    finalText: "Joyeux anniversaire de nos 20 mois mon amour",
+    finalText: "Joyeux anniversaire de nos 12 mois mon amour",
     // Tu peux ajouter, enlever ou modifier les petites phrases ici.
     riverMessages: [
       "Oui je sais, je suis en retard…",
       "Mais je voulais quand même t'offrir ton petit cadeau hehehe.",
       "Bref, je te laisse découvrir.",
-      "Je t'aimmmmmmmmmme — MWWWWWWWWWAaaaaaaaaaH, MWAHHH, MWAHHH !"
+      "Je t'aimmmmmmmmmme,MWWWWWWWWWAaaaaaaaaaH, MWAHHH, MWAHHH !"
     ],
     riverDuration: 34, // secondes, entre 30 et 40 comme demandé
     riverLength: 150,
@@ -48,7 +48,8 @@
     lakeRadius: 9, // rayon du petit lac à l'arrivée de la rivière
     lakeLingerDuration: 9, // secondes de flottaison sur le lac avant le fondu blanc
     lockEntireSite: true, // true = le site s'ouvre directement sur le compte à rebours
-    snowSceneMinDuration: 9 // secondes avant l'apparition du texte final
+    snowSceneMinDuration: 9, // secondes avant l'apparition du texte final
+    useNoelWorld: true // true = utilise le monde de Noël défini dans noel.js
   };
 
   const PARAMS = new URLSearchParams(window.location.search);
@@ -1972,6 +1973,19 @@
   `;
 
   function buildSnowScene() {
+    if (CONFIG.useNoelWorld && window.NoelWorld) {
+      const group = window.NoelWorld.build(S.ctx, {
+        getAudio: () => {
+          const context = ensureAudio();
+          return context ? { context, master: S.audio.master } : null;
+        }
+      });
+      S.snow.group = group;
+      S.look.yaw = 0;
+      S.look.pitch = 0.02;
+      S.snow.keys.clear();
+      return;
+    }
     const { THREE, scene } = S.ctx;
     const group = new THREE.Group();
     group.name = "bdaySnow";
@@ -4484,10 +4498,21 @@
 
     const skyText = createSkyText(CONFIG.finalText);
     S.ctx.scene.add(skyText);
+    if (CONFIG.useNoelWorld && window.NoelWorld) skyText.position.set(0, 60, -80);
     S.snow.textSprite = skyText;
   }
 
   function updateSnowScene(delta, elapsed) {
+    if (CONFIG.useNoelWorld && window.NoelWorld && window.NoelWorld.isBuilt()) {
+      applyLook();
+      window.NoelWorld.updatePlayer(delta, S.snow.keys, S.look, S.ctx.camera);
+      window.NoelWorld.update(delta, elapsed, S.look, S.ctx.camera);
+      if (S.snow.textSprite && now() - S.phaseStartedAt >= CONFIG.snowSceneMinDuration) {
+        S.snow.textSprite.material.opacity = Math.min(1, S.snow.textSprite.material.opacity + delta * 0.3);
+        S.phase = PHASE.FINALE;
+      }
+      return;
+    }
     applyLook();
     updateSnowPlayer(delta);
     S.snow.auroraMaterials.forEach((mat, i) => { mat.uniforms.uTime.value = elapsed * (1 + i * 0.15); });
