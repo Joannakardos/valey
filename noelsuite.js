@@ -71,7 +71,6 @@
         standNordique: { x: 0, z: -90 },
         // --- Campement sami ------------------------------------------
         lavvu: { x: -22, z: -142 },
-        rennes: { x: -8, z: -150 },
         chiens: { x: -32, z: -136 },
         // --- Église en bois debout -------------------------------------
         eglise: { x: 22, z: -148 },
@@ -85,12 +84,6 @@
 
         // --- Habitants -----------------------------------------------
         grandeTable: { x: 145, z: -2 },
-        villageois: [
-            { x: 100, z: -8, hex: 0x8a4a2a, label: "un villageois" },
-            { x: 150, z: 8, hex: 0x3a6fbf, label: "une villageoise" },
-            { x: -4, z: -92, hex: 0x5a7a8a, label: "un pêcheur" },
-            { x: -18, z: -138, hex: 0xc23a3a, label: "une éleveuse de rennes" }
-        ],
         lutinZones: [{ x: 155, z: -22 }, { x: -18, z: -112 }]
     };
 
@@ -103,7 +96,8 @@
         christkind: null, christkindTimer: 90,
         sapinStage: 0, bougiesSapin: 0, chausseeTirée: false,
         couronne: 0, prevTime: H.W.time, midnightDone: false,
-        lutins: []
+        lutins: [],
+        dogs: { active: false, list: [], home: { x: 0, z: 0 } }
     };
 
     // ============================================================
@@ -170,7 +164,26 @@
         }
     }
 
-    // Petit personnage cubique générique (villageois, lutin, Krampus, Christkind)
+    // Chien à 4 pattes (corps horizontal + tête + pattes + queue) — pas un personnage debout
+    function dogModel(x, z) {
+        const THREE = H.W.THREE;
+        const g = new THREE.Group();
+        const fur = H.lam(0xe8dcc0);
+        const dark = H.lam(0x3a2a1a);
+        H.box(0.5, 0.28, 0.24, fur, 0, 0.32, 0, g);
+        const head = new THREE.Group(); head.position.set(0, 0.4, -0.3); g.add(head);
+        H.box(0.22, 0.2, 0.2, fur, 0, 0, 0, head);
+        H.box(0.1, 0.09, 0.14, dark, 0, -0.03, -0.15, head);
+        [-1, 1].forEach((s) => H.box(0.08, 0.14, 0.04, dark, s * 0.09, 0.13, -0.02, head));
+        const legs = [[-0.16, -0.14], [0.16, -0.14], [-0.16, 0.14], [0.16, 0.14]].map(([lx, lz]) => H.box(0.09, 0.3, 0.09, dark, lx, 0.15, lz, g));
+        const tail = new THREE.Group(); tail.position.set(0, 0.42, 0.24); g.add(tail);
+        H.box(0.09, 0.09, 0.28, fur, 0, 0, 0.12, tail);
+        g.position.set(x, 0, z);
+        H.W.group.add(g);
+        return { group: g, legs, tail, phase: Math.random() * 6 };
+    }
+
+    // Petit personnage cubique générique (lutin, Krampus, Christkind)
     function figure(x, z, hex, opts) {
         const THREE = H.W.THREE;
         const o = opts || {};
@@ -596,41 +609,44 @@
             action: () => { H.warmUp(50); H.say(pick(legendes), 4000); }
         });
 
-        // Rennes
-        const rennes = [0, 1].map((i) => {
-            const r = figure(P.rennes.x + i * 1.4, P.rennes.z + i * 0.6, 0x8a6a4a, { scale: 1.1, skin: 0x8a6a4a, hat: 0x5a3a22, collide: true });
-            return r;
-        });
-        let renneNourri = false;
+        // Chiens de traîneau — de vrais compagnons à 4 pattes, comme le renard :
+        // ils t'attendent ici, et si tu les emmènes, ils te suivent partout où tu vas.
+        S.dogs.home = { x: P.chiens.x, z: P.chiens.z };
+        S.dogs.list = [0, 1, 2].map((i) => dogModel(P.chiens.x + (i - 1) * 0.7, P.chiens.z + (i % 2) * 0.4));
         H.addInteractable({
-            pos: new THREE.Vector3(P.rennes.x, 0.8, P.rennes.z), radius: 4, cone: 0.6,
-            label: () => renneNourri ? "Atteler les rennes et conduire un traîneau" : "Donner du lichen aux rennes",
+            pos: new THREE.Vector3(P.chiens.x, 0.5, P.chiens.z), radius: 4, cone: 0.6,
+            label: () => S.dogs.active ? "Dire aux chiens de rester ici" : "Emmener les chiens avec toi",
             action: () => {
-                if (!renneNourri) { renneNourri = true; H.say("Les rennes mangent le lichen dans ta main.", 2600); return; }
-                startRide([
-                    { x: P.rennes.x, z: P.rennes.z, yb: 0 },
-                    { x: P.rennes.x - 20, z: P.rennes.z - 10, yb: 0 },
-                    { x: P.rennes.x - 8, z: P.rennes.z - 26, yb: 0 },
-                    { x: P.rennes.x, z: P.rennes.z, yb: 0 }
-                ], 13, "Tu traverses la toundra en traîneau, les rênes en main.");
+                S.dogs.active = !S.dogs.active;
+                H.say(S.dogs.active
+                    ? "Les chiens bondissent joyeusement et te suivent dans la neige."
+                    : "Les chiens restent sagement ici, en t'attendant.", 2800);
             }
         });
-
-        // Chiens de traîneau
-        const chiens = [0, 1, 2].map((i) => figure(P.chiens.x + i * 0.8 - 0.8, P.chiens.z, 0xe8e2d0, { scale: 0.7, skin: 0xe8e2d0, hat: 0xe8e2d0, collide: false }));
-        let chienNourri = false;
-        H.addInteractable({
-            pos: new THREE.Vector3(P.chiens.x, 0.6, P.chiens.z), radius: 4, cone: 0.6,
-            label: () => chienNourri ? "Partir en balade en traîneau à chiens" : "Nourrir et caresser les chiens",
-            action: () => {
-                if (!chienNourri) { chienNourri = true; H.say("Les chiens remuent la queue et se laissent caresser.", 2600); return; }
-                startRide([
-                    { x: P.chiens.x, z: P.chiens.z, yb: 0.4 },
-                    { x: P.chiens.x + 18, z: P.chiens.z - 14, yb: 0.4 },
-                    { x: P.chiens.x, z: P.chiens.z - 22, yb: 0.4 },
-                    { x: P.chiens.x, z: P.chiens.z, yb: 0.4 }
-                ], 10, "Les chiens filent joyeusement à travers la neige, puis se couchent contre toi près du feu.");
+    }
+    function updateDogs(delta) {
+        const d = S.dogs;
+        if (!d.list.length) return;
+        const cam = H.W.camera.position;
+        d.list.forEach((dog, i) => {
+            const ang = i * 2.1;
+            const tx = d.active ? cam.x + Math.cos(ang) * 1.6 : d.home.x + Math.cos(ang) * 0.7;
+            const tz = d.active ? cam.z + Math.sin(ang) * 1.6 : d.home.z + Math.sin(ang) * 0.7;
+            const dx = tx - dog.group.position.x, dz = tz - dog.group.position.z;
+            const dist = Math.hypot(dx, dz);
+            const speed = Math.min(6.5, 1.5 + dist * 2.2);
+            if (dist > 0.06) {
+                const step = Math.min(dist, speed * delta);
+                dog.group.position.x += (dx / dist) * step;
+                dog.group.position.z += (dz / dist) * step;
+                const want = Math.atan2(-dx, -dz);
+                let da = want - dog.group.rotation.y;
+                da = Math.atan2(Math.sin(da), Math.cos(da));
+                dog.group.rotation.y += da * Math.min(1, delta * 7);
             }
+            dog.phase += (dist > 0.15 ? speed : 1.2) * delta * 3.2;
+            dog.legs.forEach((l, li) => { l.rotation.x = dist > 0.15 ? Math.sin(dog.phase + (li % 2 ? Math.PI : 0)) * 0.6 : 0; });
+            dog.tail.rotation.x = -0.3 + Math.sin(H.W.t * 4 + i) * 0.25;
         });
     }
 
@@ -855,27 +871,12 @@
     // ============================================================
     function buildHabitants() {
         const THREE = H.W.THREE;
-        const dialogues = [
-            "« Joyeux Noël à toi, voyageur. »",
-            "« Le froid est vif ce soir, viens te réchauffer près d'un des feux. »",
-            "« On dit que le renard de feu porte chance à qui le croise. »",
-            "« Tu devrais voir les aurores depuis le sommet, ce soir elles sont magnifiques. »"
-        ];
-        P.villageois.forEach((v) => {
-            const g = figure(v.x, v.z, v.hex, { scale: 1.1 });
-            H.addInteractable({
-                pos: new THREE.Vector3(v.x, 1.0, v.z), radius: 3.2, cone: 0.6,
-                label: () => "Parler à " + v.label,
-                action: () => H.say(pick(dialogues), 2800)
-            });
-        });
 
-        // Grande table — repas de famille
+        // Grande table — repas de famille (l'ambiance suffit, sans figurants)
         const table = new THREE.Group();
         const wood = H.lam(0x5a3a22);
         H.box(4.0, 0.15, 1.6, wood, 0, 1.0, 0, table);
         [[-1.8, -0.65], [1.8, -0.65], [-1.8, 0.65], [1.8, 0.65]].forEach(([tx, tz]) => H.box(0.14, 1.0, 0.14, wood, tx, 0.5, tz, table));
-        [-1.3, -0.4, 0.4, 1.3].forEach((sx) => figure(P.grandeTable.x + sx, P.grandeTable.z + 1.1, pick([0x8a4a2a, 0x3a6fbf, 0xc23a3a]), { scale: 0.95 }));
         table.position.set(P.grandeTable.x, 0, P.grandeTable.z);
         H.W.group.add(table);
         H.addCollider(P.grandeTable.x, P.grandeTable.z, 2.4);
@@ -962,6 +963,7 @@
     // ============================================================
     function tick(delta, t) {
         updateRide(delta);
+        updateDogs(delta);
         S.animated.forEach((a) => a.update(t, delta));
 
         // Krampus : la nuit, dans la zone Forêt-Noire, rarement
